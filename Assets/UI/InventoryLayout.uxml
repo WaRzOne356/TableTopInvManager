@@ -1,0 +1,68 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ui:UXML xmlns:ui="UnityEngine.UIElements" xmlns:uie="UnityEditor.UIElements">
+  <ui:VisualElement name="root" class="main-container">
+    <!-- Header Section -->
+    <ui:VisualElement name="header" class="header-panel">
+      <ui:Label text="🎲 Party Inventory Manager" class="title-text" />
+      <ui:VisualElement class="header-info">
+        <ui:Label name="group-name" text="The Brave Adventurers" class="group-name" />
+        <ui:Label name="player-count" text="👥 3 Players" class="player-count" />
+      </ui:VisualElement>
+    </ui:VisualElement>
+
+    <!-- Controls Section -->
+    <ui:VisualElement name="controls" class="controls-panel">
+      <ui:VisualElement class="controls-row">
+        <!-- Search -->
+        <ui:TextField name="search-field" placeholder-text="🔍 Search items..." class="search-box" />
+
+        <!-- Category Filter -->
+        <ui:DropdownField name="category-filter" label="Category:" class="category-dropdown" />
+
+        <!-- View Toggle Buttons -->
+        <ui:VisualElement class="view-toggle">
+          <ui:Button name="grid-view-btn" text="⚏ Grid" class="view-btn" />
+          <ui:Button name="list-view-btn" text="☰ List" class="view-btn" />
+        </ui:VisualElement>
+      </ui:VisualElement>
+
+      <ui:VisualElement class="controls-row">
+        <!-- Add Item Button -->
+        <ui:Button name="add-item-btn" text="➕ Add Item" class="btn-primary" />
+
+        <!-- Quick Add Buttons -->
+        <ui:VisualElement class="quick-add">
+          <ui:Label text="Quick Add:" class="quick-label" />
+          <ui:Button name="add-gold-btn" text="💰 +10 Gold" class="btn-quick" />
+          <ui:Button name="add-potion-btn" text="🧪 Potion" class="btn-quick" />
+          <ui:Button name="add-rations-btn" text="🍖 Rations" class="btn-quick" />
+        </ui:VisualElement>
+      </ui:VisualElement>
+    </ui:VisualElement>
+
+    <!-- Stats Section -->
+    <ui:VisualElement name="stats" class="stats-panel">
+      <ui:VisualElement class="stat-item">
+        <ui:Label name="total-items" text="0" class="stat-value" />
+        <ui:Label text="Items" class="stat-label" />
+      </ui:VisualElement>
+      <ui:VisualElement class="stat-item">
+        <ui:Label name="total-weight" text="0.0 lbs" class="stat-value" />
+        <ui:Label text="Weight" class="stat-label" />
+      </ui:VisualElement>
+      <ui:VisualElement class="stat-item">
+        <ui:Label name="total-value" text="0 gp" class="stat-value" />
+        <ui:Label text="Value" class="stat-label" />
+      </ui:VisualElement>
+    </ui:VisualElement>
+
+    <!-- Main Inventory Area -->
+    <ui:VisualElement name="inventory-section" class="inventory-container">
+      <ui:ScrollView name="inventory-scroll" class="inventory-scroll">
+        <ui:VisualElement name="inventory-content" class="inventory-grid">
+          <!-- Items will be added here dynamically -->
+        </ui:VisualElement>
+      </ui:ScrollView>
+    </ui:VisualElement>
+  </ui:VisualElement>
+</ui:UXML>

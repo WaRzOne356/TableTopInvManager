@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ui:UXML xmlns:ui="UnityEngine.UIElements">
+  <ui:VisualElement name="item-card" class="grid-item-card">
+    <!-- Item Header -->
+    <ui:VisualElement class="item-header">
+      <ui:VisualElement name="thumbnail" class="item-thumbnail">
+        <ui:Label text="📦" class="thumbnail-icon" />
+      </ui:VisualElement>
+      <ui:VisualElement class="item-title-area">
+        <ui:Label name="item-name" text="Item Name" class="item-name" />
+        <ui:Label name="item-category" text="Category" class="item-category" />
+      </ui:VisualElement>
+      <ui:Button name="delete-btn" text="🗑️" class="delete-btn" />
+    </ui:VisualElement>
+
+    <!-- Item Description -->
+    <ui:Label name="item-description" text="Item description goes here..." class="item-description" />
+
+    <!-- Item Stats -->
+    <ui:VisualElement class="item-stats">
+      <ui:Label name="item-weight" text="0.0 lbs" class="stat-text" />
+      <ui:Label name="item-value" text="0 gp" class="stat-text" />
+    </ui:VisualElement>
+
+    <!-- Quantity Controls -->
+    <ui:VisualElement class="quantity-controls">
+      <ui:Button name="decrease-btn" text="−" class="quantity-btn" />
+      <ui:Label name="quantity-display" text="1" class="quantity-text" />
+      <ui:Button name="increase-btn" text="+" class="quantity-btn" />
+    </ui:VisualElement>
+
+    <!-- Owner & Notes -->
+    <ui:VisualElement class="item-footer">
+      <ui:Label name="item-owner" text="Party Item" class="owner-text" />
+      <ui:Label name="player-notes" text="No notes" class="notes-text" />
+    </ui:VisualElement>
+  </ui:VisualElement>
+</ui:UXML>

@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ui:UXML xmlns:ui="UnityEngine.UIElements">
+  <ui:VisualElement name="item-row" class="list-item-row">
+    <ui:VisualElement name="thumbnail" class="list-thumbnail">
+      <ui:Label text="📦" class="thumbnail-icon" />
+    </ui:VisualElement>
+
+    <ui:VisualElement class="item-info">
+      <ui:Label name="item-name" text="Item Name" class="list-item-name" />
+      <ui:Label name="item-description" text="Description" class="list-description" />
+    </ui:VisualElement>
+
+    <ui:Label name="item-category" text="Category" class="list-category" />
+    <ui:Label name="item-weight" text="0.0 lbs" class="list-stat" />
+    <ui:Label name="item-value" text="0 gp" class="list-stat" />
+
+    <ui:VisualElement class="list-quantity">
+      <ui:Button name="decrease-btn" text="−" class="quantity-btn-small" />
+      <ui:Label name="quantity-display" text="1" class="quantity-text-small" />
+      <ui:Button name="increase-btn" text="+" class="quantity-btn-small" />
+    </ui:VisualElement>
+
+    <ui:Button name="delete-btn" text="🗑️" class="delete-btn-small" />
+  </ui:VisualElement>
+</ui:UXML>
