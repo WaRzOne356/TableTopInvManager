@@ -20,7 +20,8 @@ namespace InventorySystem.UI.Navigation
 
         public virtual void Inititialize()
         {
-            Debug.Log($)
+            Debug.Log($"[UIPages] Page initializing: {pageType}");
+
         }
         // Start is called once before the first execution of Update after the MonoBehaviour is created
         void Start()
