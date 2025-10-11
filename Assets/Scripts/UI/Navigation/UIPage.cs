@@ -23,16 +23,59 @@ namespace InventorySystem.UI.Navigation
             Debug.Log($"[UIPages] Page initializing: {pageType}");
 
         }
-        // Start is called once before the first execution of Update after the MonoBehaviour is created
-        void Start()
-        {
-
-        }
-
-        // Update is called once per frame
-        void Update()
-        {
-
-        }
-    }
+         
+        public virtual void OnPageEnter()
+        {
+            Debug.Log($"[UIPage] Entering page: {pageType}");
+            
+            if (showLoadingOnEnter)
+                SetLoadingState(true);
+                
+            if (refreshOnEnter)
+                RefreshContent();
+        }
+        
+        public virtual void OnPageExit()
+        {
+            Debug.Log($"[UIPage] Exiting page: {pageType}");
+            SetLoadingState(false);
+        }
+        
+        protected virtual void RefreshContent()
+        {
+            // Override in derived classes to refresh page content
+        }
+        
+        protected void SetLoadingState(bool loading)
+        {
+            if (loadingIndicator != null)
+                loadingIndicator.SetActive(loading);
+        }
+        
+        /// <summary>
+        /// Navigate to another page from this page
+        /// </summary>
+        protected void NavigateTo(UIPageType targetPage)
+        {
+            UIPageManager.Instance?.NavigateToPage(targetPage);
+        }
+        
+        /// <summary>
+        /// Show a notification/message on this page
+        /// </summary>
+        protected virtual void ShowMessage(string message, MessageType type = MessageType.Info)
+        {
+            Debug.Log($"[{pageType}] {type}: {message}");
+            // Override in derived classes to show actual UI messages
+        }
+        
+        protected enum MessageType
+        {
+            Info,
+            Warning,
+            Error,
+            Success
+        }
+    }
 }
+ 
