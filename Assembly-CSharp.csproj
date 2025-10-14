@@ -67,6 +67,7 @@
     <Compile Include="Assets\Scripts\UI\Navigation\UIPage.cs" />
     <Compile Include="Assets\Scripts\HTTP\HTTPManager.cs" />
     <Compile Include="Assets\Scripts\UI\AddItemDialog.cs" />
+    <Compile Include="Assets\Scripts\UI\Navigation\SidebarNavigation.cs" />
     <Compile Include="Assets\Scripts\UI\ItemCardUI.cs" />
     <Compile Include="Assets\Scripts\Network\NetworkInventoryData.cs" />
     <Compile Include="Assets\Scripts\Data\JSONInventoryStorage.cs" />
@@ -76,6 +77,7 @@
     <Compile Include="Assets\Scripts\Network\JSONInventoryStorage.cs" />
     <Compile Include="Assets\Scripts\Data\InventoryPersistence.cs" />
     <Compile Include="Assets\Scripts\Network\NetworkInventoryManager.cs" />
+    <Compile Include="Assets\Scripts\UI\Navigation\SidebarMenuItemUI.cs" />
     <Compile Include="Assets\Scripts\Data\GroupInventory.cs" />
     <Compile Include="Assets\Scripts\Data\IInventoryStorage.cs" />
     <Compile Include="Assets\Scripts\UI\PropertyRowUI.cs" />
