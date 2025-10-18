@@ -62,11 +62,14 @@
   </ItemGroup>
   <ItemGroup>
     <Compile Include="Assets\Scripts\UI\InventoryUIManager.cs" />
+    <Compile Include="Assets\Scripts\UI\Pages\UIPage.cs" />
+    <Compile Include="Assets\Scripts\UI\Pages\GroupInventoryPage.cs" />
     <Compile Include="Assets\Scripts\Data\InventoryItem.cs" />
     <Compile Include="Assets\Scripts\UI\Navigation\UIPageManager.cs" />
-    <Compile Include="Assets\Scripts\UI\Navigation\UIPage.cs" />
     <Compile Include="Assets\Scripts\HTTP\HTTPManager.cs" />
+    <Compile Include="Assets\Scripts\UI\Pages\UserProfilePage.cs" />
     <Compile Include="Assets\Scripts\UI\AddItemDialog.cs" />
+    <Compile Include="Assets\Scripts\UI\Pages\PersonalInventoryPage.cs" />
     <Compile Include="Assets\Scripts\UI\Navigation\SidebarNavigation.cs" />
     <Compile Include="Assets\Scripts\UI\ItemCardUI.cs" />
     <Compile Include="Assets\Scripts\Network\NetworkInventoryData.cs" />
