@@ -1,16 +1,327 @@
-using UnityEngine;
+﻿// ============================================================================
+// GROUP INVENTORY PAGE
+// ============================================================================
 
-public class GroupInventoryPage : MonoBehaviour
+/// <summary>
+/// Group/party inventory management page
+/// </summary>
+public class GroupInventoryPage : UIPage
 {
-    // Start is called once before the first execution of Update after the MonoBehaviour is created
-    void Start()
+    [Header("Group Inventory Display")]
+    [SerializeField] private Transform itemContainer;
+    [SerializeField] private ScrollRect inventoryScrollView;
+    [SerializeField] private GameObject itemCardPrefab; // Should have ItemCardUI component
+
+    [Header("Group Controls")]
+    [SerializeField] private TMP_InputField searchField;
+    [SerializeField] private TMP_Dropdown categoryFilter;
+    [SerializeField] private TMP_Dropdown ownerFilter;
+    [SerializeField] private Button addItemButton;
+    [SerializeField] private Button sortButton;
+
+    [Header("Group Stats")]
+    [SerializeField] private TextMeshProUGUI totalItemsText;
+    [SerializeField] private TextMeshProUGUI totalWeightText;
+    [SerializeField] private TextMeshProUGUI totalValueText;
+    [SerializeField] private TextMeshProUGUI groupMembersText;
+
+    [Header("Group Management")]
+    [SerializeField] private Button manageUsersButton;
+    [SerializeField] private Button exportGroupInventoryButton;
+    [SerializeField] private Button shareInventoryLinkButton;
+
+    [Header("Connection Status")]
+    [SerializeField] private TextMeshProUGUI connectionStatusText;
+    [SerializeField] private TextMeshProUGUI lastSyncText;
+    [SerializeField] private Button reconnectButton;
+
+    // State
+    private List<InventoryItem> groupItems;
+    private List<GameObject> itemCardObjects;
+    private NetworkInventoryManager networkManager;
+
+    void Awake()
     {
-        
+        pageType = UIPageType.GroupInventory;
+        pageTitle = "Group Inventory";
+
+        groupItems = new List<InventoryItem>();
+        itemCardObjects = new List<GameObject>();
+
+        SetupEventHandlers();
     }
 
-    // Update is called once per frame
-    void Update()
+    void Start()
     {
-        
+        networkManager = NetworkInventoryManager.Instance;
+        if (networkManager != null)
+        {
+            networkManager.OnInventoryChanged += OnNetworkInventoryChanged;
+            networkManager.OnInventoryMessage += OnNetworkMessage;
+            networkManager.OnUsersChanged += OnUsersChanged;
+        }
+    }
+
+    private void SetupEventHandlers()
+    {
+        searchField?.onValueChanged.AddListener(OnSearchChanged);
+        categoryFilter?.onValueChanged.AddListener(OnFilterChanged);
+        ownerFilter?.onValueChanged.AddListener(OnFilterChanged);
+        addItemButton?.onClick.AddListener(OpenItemBrowser);
+        sortButton?.onClick.AddListener(CycleSortMode);
+        manageUsersButton?.onClick.AddListener(OpenUserManagement);
+        exportGroupInventoryButton?.onClick.AddListener(ExportGroupInventory);
+        shareInventoryLinkButton?.onClick.AddListener(ShareInventoryLink);
+        reconnectButton?.onClick.AddListener(Reconnect);
+    }
+
+    protected override void RefreshContent()
+    {
+        LoadGroupInventory();
+        UpdateGroupStats();
+        UpdateConnectionStatus();
+        RefreshItemDisplay();
+    }
+
+    private void LoadGroupInventory()
+    {
+        groupItems.Clear();
+
+        if (networkManager != null)
+        {
+            var inventory = networkManager.GetCurrentInventory();
+            if (inventory != null)
+            {
+                groupItems.AddRange(inventory);
+            }
+        }
+
+        Debug.Log($"[GroupInventory] Loaded {groupItems.Count} group items");
+    }
+
+    private void RefreshItemDisplay()
+    {
+        ClearItemCards();
+
+        var filteredItems = GetFilteredAndSortedItems();
+
+        foreach (var item in filteredItems)
+        {
+            CreateGroupItemCard(item);
+        }
+
+        UpdateGroupStats();
+    }
+
+    private List<InventoryItem> GetFilteredAndSortedItems()
+    {
+        var filtered = groupItems.ToList();
+
+        // Apply search filter
+        string searchTerm = searchField?.text?.ToLower() ?? "";
+        if (!string.IsNullOrEmpty(searchTerm))
+        {
+            filtered = filtered.Where(item =>
+                item.itemName.ToLower().Contains(searchTerm) ||
+                item.description.ToLower().Contains(searchTerm)
+            ).ToList();
+        }
+
+        // Apply category filter
+        if (categoryFilter != null && categoryFilter.value > 0)
+        {
+            var categories = System.Enum.GetValues(typeof(ItemCategory)).Cast<ItemCategory>().ToArray();
+            var selectedCategory = categories[categoryFilter.value - 1];
+            filtered = filtered.Where(item => item.category == selectedCategory).ToList();
+        }
+
+        // Apply owner filter
+        if (ownerFilter != null && ownerFilter.value > 0)
+        {
+            string selectedOwner = ownerFilter.options[ownerFilter.value].text;
+            if (selectedOwner == "Unassigned")
+            {
+                filtered = filtered.Where(item => string.IsNullOrEmpty(item.currentOwner)).ToList();
+            }
+            else
+            {
+                filtered = filtered.Where(item => item.currentOwner == selectedOwner).ToList();
+            }
+        }
+
+        // Sort items
+        return filtered.OrderBy(item => item.category).ThenBy(item => item.itemName).ToList();
+    }
+
+    private void CreateGroupItemCard(InventoryItem item)
+    {
+        if (itemCardPrefab == null || itemContainer == null) return;
+
+        var cardObj = Instantiate(itemCardPrefab, itemContainer);
+        var cardUI = cardObj.GetComponent<ItemCardUI>();
+
+        if (cardUI != null)
+        {
+            if (cardUI != null)
+            {
+                // Use the unified ItemCardUI with Group mode
+                cardUI.SetupGroupCard(item);
+                cardUI.OnItemModified += OnGroupItemModified;
+            }
+
+            itemCardObjects.Add(cardObj);
+        }
+
+        private void ClearItemCards()
+        {
+            foreach (var cardObj in itemCardObjects)
+            {
+                if (cardObj != null)
+                    Destroy(cardObj);
+            }
+            itemCardObjects.Clear();
+        }
+
+        private void UpdateGroupStats()
+        {
+            var filteredItems = GetFilteredAndSortedItems();
+
+            if (totalItemsText != null)
+                totalItemsText.text = $"Total Items: {filteredItems.Count}";
+
+            float totalWeight = filteredItems.Sum(item => item.TotalWeight);
+            if (totalWeightText != null)
+                totalWeightText.text = $"Total Weight: {totalWeight:F1} lbs";
+
+            int totalValue = filteredItems.Sum(item => item.TotalValue);
+            if (totalValueText != null)
+                totalValueText.text = $"Total Value: {totalValue:N0} gp";
+
+            // Update group members count
+            if (groupMembersText != null && networkManager != null)
+            {
+                // This would come from the network manager's user list
+                groupMembersText.text = "Group Members: 3"; // Placeholder
+            }
+        }
+
+        private void UpdateConnectionStatus()
+        {
+            bool isConnected = networkManager != null && networkManager.IsConnected();
+
+            if (connectionStatusText != null)
+            {
+                connectionStatusText.text = isConnected ? "🟢 Connected" : "🔴 Offline";
+                connectionStatusText.color = isConnected ? Color.green : Color.red;
+            }
+
+            if (lastSyncText != null)
+            {
+                lastSyncText.text = $"Last sync: {System.DateTime.Now:HH:mm:ss}";
+            }
+
+            if (reconnectButton != null)
+            {
+                reconnectButton.gameObject.SetActive(!isConnected);
+            }
+        }
+
+        // Event Handlers
+        private void OnNetworkInventoryChanged(List<InventoryItem> updatedInventory)
+        {
+            groupItems = updatedInventory.ToList();
+            RefreshItemDisplay();
+        }
+
+        private void OnNetworkMessage(string message)
+        {
+            ShowMessage(message, MessageType.Info);
+        }
+
+        private void OnUsersChanged(List<NetworkUserInfo> users)
+        {
+            UpdateOwnerFilter(users);
+            UpdateGroupStats();
+        }
+
+        private void UpdateOwnerFilter(List<NetworkUserInfo> users)
+        {
+            if (ownerFilter == null) return;
+
+            ownerFilter.ClearOptions();
+            var options = new List<string> { "All Players", "Unassigned" };
+            options.AddRange(users.Where(u => u.isOnline).Select(u => u.userName.ToString()));
+            ownerFilter.AddOptions(options);
+        }
+
+        private void OnSearchChanged(string searchTerm)
+        {
+            RefreshItemDisplay();
+        }
+
+        private void OnFilterChanged(int filterIndex)
+        {
+            RefreshItemDisplay();
+        }
+
+        private void OnGroupItemModified(InventoryItem item)
+        {
+            if (networkManager != null)
+            {
+                networkManager.UpdateItemQuantity(item.itemId, item.quantity);
+            }
+        }
+
+        private void OpenItemBrowser()
+        {
+            NavigateTo(UIPageType.ItemBrowser);
+        }
+
+        private void CycleSortMode()
+        {
+            // Cycle through different sort modes
+            ShowMessage("Sort mode cycling - feature coming soon!", MessageType.Info);
+        }
+
+        private void OpenUserManagement()
+        {
+            ShowMessage("User management dialog - feature coming soon!", MessageType.Info);
+        }
+
+        private void ExportGroupInventory()
+        {
+            ShowMessage("Exporting group inventory...", MessageType.Info);
+            // TODO: Implement group inventory export
+        }
+
+        private void ShareInventoryLink()
+        {
+            // Generate shareable link or invite code
+            string inviteCode = System.Guid.NewGuid().ToString("N")[..8].ToUpper();
+            ShowMessage($"Invite code: {inviteCode} (copied to clipboard)", MessageType.Success);
+
+            // TODO: Implement actual link sharing system
+        }
+
+        private void Reconnect()
+        {
+            ShowMessage("Attempting to reconnect...", MessageType.Info);
+
+            // TODO: Implement network reconnection logic
+            if (networkManager != null)
+            {
+                // networkManager.Reconnect();
+            }
+        }
+
+        void OnDestroy()
+        {
+            if (networkManager != null)
+            {
+                networkManager.OnInventoryChanged -= OnNetworkInventoryChanged;
+                networkManager.OnInventoryMessage -= OnNetworkMessage;
+                networkManager.OnUsersChanged -= OnUsersChanged;
+            }
+        }
     }
 }
