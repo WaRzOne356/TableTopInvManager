@@ -18,6 +18,9 @@ namespace InventorySystem.UI.Pages
         [SerializeField] private ScrollRect inventoryScrollView;
         [SerializeField] private GameObject itemCardPrefab; // Should have ItemCardUI component
 
+        [Header("Dialogs")]
+        [SerializeField] private AddItemDialog addItemDialog;
+
         [Header("Controls")]
         [SerializeField] private TMP_InputField searchField;
         [SerializeField] private TMP_Dropdown categoryFilter;
@@ -51,6 +54,21 @@ namespace InventorySystem.UI.Pages
             itemCardObjects = new List<GameObject>();
 
             SetupEventHandlers();
+            SetupAddItemDialog();
+        }
+
+        private void SetupAddItemDialog()
+        {
+            if (addItemDialog != null)
+            {
+                addItemDialog.OnItemCreated += OnCustomItemCreated;
+                addItemDialog.OnItemSelected += OnItemSelectedFromSearch;
+                addItemDialog.OnDialogClosed += OnAddItemDialogClosed;
+            }
+            else
+            {
+                Debug.LogWarning("[PersonalInventory] AddItemDialog reference not set!");
+            }
         }
 
         private void SetupEventHandlers()
@@ -138,6 +156,24 @@ namespace InventorySystem.UI.Pages
             return filtered.OrderBy(item => item.category).ThenBy(item => item.itemName).ToList();
         }
 
+        private void CreateItemCard(InventoryItem item)
+        {
+            if (itemCardPrefab == null || itemContainer == null) return;
+
+            var cardObj = Instantiate(itemCardPrefab, itemContainer);
+            var cardUI = cardObj.GetComponent<ItemCardUI>();
+
+            if (cardUI != null)
+            {
+                // Use the unified ItemCardUI with Group mode
+                cardUI.SetupPersonalCard(item, isGridView);
+                cardUI.OnItemModified += OnItemModified;
+                cardUI.OnOwnershipChanged += OnOwnershipChanged;
+            }
+
+            itemCardObjects.Add(cardObj);
+        }
+
 
         private void ClearItemCards()
         {
@@ -148,7 +184,6 @@ namespace InventorySystem.UI.Pages
             }
             itemCardObjects.Clear();
         }
-
         private void UpdatePersonalStats()
         {
             var filteredItems = GetFilteredItems();
@@ -199,28 +234,41 @@ namespace InventorySystem.UI.Pages
 
         private void OnSearchChanged(string searchTerm)
         {
+            // Debounce search to avoid refreshing on every keystroke
+            // In a production app, you'd want to add a small delay here
+            Debug.Log($"[PersonalInventory] Search changed: '{searchTerm}'");
             RefreshItemDisplay();
         }
 
         private void OnCategoryFilterChanged(int filterIndex)
         {
+            string categoryName = filterIndex > 0 ? categoryFilter.options[filterIndex].text : "All";
+            Debug.Log($"[PersonalInventory] Category filter changed to: {categoryName}");
             RefreshItemDisplay();
         }
 
         private void OnShowOwnedOnlyChanged(bool ownedOnly)
         {
+            Debug.Log($"[PersonalInventory] Show owned only: {ownedOnly}");
             RefreshItemDisplay();
         }
 
         private void OnItemModified(InventoryItem item)
         {
+            Debug.Log($"[PersonalInventory] Item modified: {item.itemName}, Quantity: {item.quantity}");
+
             // Update the item in the network inventory
             if (NetworkInventoryManager.Instance != null)
             {
                 NetworkInventoryManager.Instance.UpdateItemQuantity(item.itemId, item.quantity);
             }
+            else
+            {
+                Debug.LogWarning("[PersonalInventory] NetworkInventoryManager not available, changes not synced");
+            }
 
-            RefreshItemDisplay();
+            // Refresh to show updated stats
+            UpdatePersonalStats();
         }
 
         private void OnOwnershipChanged(InventoryItem item, string newOwner)
@@ -235,8 +283,86 @@ namespace InventorySystem.UI.Pages
 
         private void OpenAddItemDialog()
         {
-            // Navigate to item browser page or open add dialog
-            NavigateTo(UIPageType.ItemBrowser);
+            if (addItemDialog != null)
+            {
+                string playerName = GetCurrentPlayerName();
+                addItemDialog.ShowDialog(playerName);
+                Debug.Log($"[PersonalInventory] Opening add item dialog for {playerName}");
+            }
+            else
+            {
+                // Fallback: Navigate to item browser if dialog not available
+                Debug.LogWarning("[PersonalInventory] AddItemDialog not assigned, navigating to ItemBrowser");
+                NavigateTo(UIPageType.ItemBrowser);
+            }
+        }
+
+        private async void OnCustomItemCreated(CustomItemData customItem)
+        {
+            Debug.Log($"[PersonalInventory] Custom item created: {customItem.itemName}");
+
+            try
+            {
+                // Use built-in conversion method
+                var inventoryItem = customItem.ToInventoryItem();
+
+                // Override owner to assign to current player
+                inventoryItem.currentOwner = GetCurrentPlayerName();
+                // inventoryItem.isCustomItem = true;
+
+                // Add to network inventory
+                if (NetworkInventoryManager.Instance != null)
+                {
+                    NetworkInventoryManager.Instance.AddItem(inventoryItem);
+
+                    await System.Threading.Tasks.Task.Delay(300);
+                    RefreshContent();
+                }
+                else
+                {
+                    ShowMessage("Network manager not available", MessageType.Error);
+                }
+            }
+            catch (System.Exception e)
+            {
+                Debug.LogError($"[PersonalInventory] Error adding custom item: {e.Message}");
+                ShowMessage($"Error: {e.Message}", MessageType.Error);
+            }
+        }
+
+        private void OnAddItemDialogClosed()
+        {
+            Debug.Log("[PersonalInventory] Add item dialog closed");
+            // Optional: Refresh focus or perform cleanup
+        }
+
+        private async void OnItemSelectedFromSearch(InventoryItem item)
+        {
+            Debug.Log($"[PersonalInventory] Item selected from search: {item.itemName}");
+
+            try
+            {
+                // Override owner to assign to current player
+                item.currentOwner = GetCurrentPlayerName();
+
+                // Add to network inventory
+                if (NetworkInventoryManager.Instance != null)
+                {
+                    NetworkInventoryManager.Instance.AddItem(item);
+
+                    await System.Threading.Tasks.Task.Delay(300);
+                    RefreshContent();
+                }
+                else
+                {
+                    ShowMessage("Network manager not available", MessageType.Error);
+                }
+            }
+            catch (System.Exception e)
+            {
+                Debug.LogError($"[PersonalInventory] Error adding searched item: {e.Message}");
+                ShowMessage($"Error: {e.Message}", MessageType.Error);
+            }
         }
 
         private void ImportItems()
@@ -291,6 +417,16 @@ namespace InventorySystem.UI.Pages
         {
             return PlayerPrefs.GetString("UserName", System.Environment.UserName ?? "Player");
         }
-    }
 
+        void OnDestroy()
+        {
+            // Clean up dialog events
+            if (addItemDialog != null)
+            {
+                addItemDialog.OnItemCreated -= OnCustomItemCreated;
+                addItemDialog.OnItemSelected -= OnItemSelectedFromSearch;
+                addItemDialog.OnDialogClosed -= OnAddItemDialogClosed;
+            }
+        }
+    }
 }

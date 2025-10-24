@@ -1,8 +1,10 @@
 using System;
+using System.Linq;
 using UnityEngine;
 using UnityEngine.UI;
 using TMPro;
-using InventorySystem.UI;
+using InventorySystem.UI.Navigation;
+using InventorySystem.UI.Pages;
 using InventorySystem.Data;
 
 
@@ -42,7 +44,7 @@ namespace InventorySystem.UI.Pages
         {
             saveProfileButton?.onClick.AddListener(SaveProfile);
             changeAvatarButton?.onClick.AddListener(ChangeAvatar);
-            exportDataButton?.onClick.AddListener(ExportDataButton);
+            exportDataButton?.onClick.AddListener(ExportUserData);
         }
 
         protected override void RefreshContent()
@@ -62,7 +64,7 @@ namespace InventorySystem.UI.Pages
             if (membersinceText != null)
                 membersinceText.text = "Member since: " + System.DateTime.Now.AddDays(-30).ToString("MMM yyyy");
 
-            LoadAvatar();
+            LoadUserAvatar();
         }
 
         private void LoadUserStatistics()

@@ -1,11 +1,13 @@
-using System;
+﻿using System;
+using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 
-
 namespace InventorySystem.UI.Navigation
 {
-    //Class that manages Page Navigation and what page the user is currently on
+    /// <summary>
+    /// Manages navigation between different UI pages/views
+    /// </summary>
     public class UIPageManager : MonoBehaviour
     {
         [Header("Page Configuration")]
@@ -14,27 +16,29 @@ namespace InventorySystem.UI.Navigation
         [SerializeField] private bool rememberLastPage = true;
 
         [Header("Navigation")]
-        [SerializeField] private SidebarNavigation sideBar;
+        [SerializeField] private SidebarNavigation sidebar;
         [SerializeField] private Transform pageContainer;
 
         [Header("Transitions")]
         [SerializeField] private bool enableTransitions = true;
         [SerializeField] private float transitionDuration = 0.3f;
+        [SerializeField] private AnimationCurve transitionCurve = AnimationCurve.EaseInOut(0, 0, 1, 1);
 
-        //Events
-        public static event Action<UIPageType, UIPageType> OnPageChaged; //old,new
+        // Events
+        public static event Action<UIPageType, UIPageType> OnPageChanged; // old, new
 
-        //State
+        // State
         private UIPageType currentPageType;
         private UIPage currentPage;
         private Dictionary<UIPageType, UIPage> pageMap;
+        private Coroutine transitionCoroutine;
 
-        //Singleton
-        private static UIPageManager Instance { get; private set; }
+        // Singleton
+        public static UIPageManager Instance { get; private set; }
 
-        private void Awake()
+        void Awake()
         {
-            if(Instance == null)
+            if (Instance == null)
             {
                 Instance = this;
                 DontDestroyOnLoad(gameObject);
@@ -46,19 +50,19 @@ namespace InventorySystem.UI.Navigation
             }
         }
 
-        private void Start()
+        void Start()
         {
             SetupNavigation();
-            NatigateToDefaultPage();
+            NavigateToDefaultPage();
         }
 
         private void InitializePages()
         {
             pageMap = new Dictionary<UIPageType, UIPage>();
 
-            foreach(var page in pages)
+            foreach (var page in pages)
             {
-                if(page != null)
+                if (page != null)
                 {
                     pageMap[page.PageType] = page;
                     page.gameObject.SetActive(false);
@@ -71,10 +75,10 @@ namespace InventorySystem.UI.Navigation
 
         private void SetupNavigation()
         {
-            if(sideBar != null)
+            if (sidebar != null)
             {
-                sideBar.OnNavigationRequested += NavigateToPage;
-                sideBar.SetActivePageType(defaultPage);
+                sidebar.OnNavigationRequested += NavigateToPage;
+                sidebar.SetActivePageType(defaultPage);
             }
         }
 
@@ -82,140 +86,220 @@ namespace InventorySystem.UI.Navigation
         {
             UIPageType targetPage = defaultPage;
 
-            //Try to restore last page if setting enabled
-            if(rememberLastPage)
+            // Try to restore last page if enabled
+            if (rememberLastPage)
             {
                 string lastPageKey = "LastUIPage";
-                if(PlayerPrefs.HasKey(lastPageKey))
+                if (PlayerPrefs.HasKey(lastPageKey))
                 {
                     string lastPageStr = PlayerPrefs.GetString(lastPageKey);
                     if (Enum.TryParse(lastPageStr, out UIPageType lastPage))
+                    {
                         targetPage = lastPage;
+                    }
                 }
             }
 
             NavigateToPage(targetPage);
         }
 
-        private void NavigateToPage(UIPageType targetPage)
+        /// <summary>
+        /// Navigate to specified page
+        /// </summary>
+        public void NavigateToPage(UIPageType pageType)
         {
-            if (currentPage == targetPage)
+            if (currentPageType == pageType)
             {
-                Debug.Log($"[UIPageManager] Already on page: {targetPage}");
+                Debug.Log($"[UIPageManager] Already on page: {pageType}");
                 return;
             }
 
-            if (!pageMap.ContainsKey(targetPage))
+            if (!pageMap.ContainsKey(pageType))
             {
-                Debug.LogError($"[UIPageManager] Page not found: {targetPage}");
+                Debug.LogError($"[UIPageManager] Page not found: {pageType}");
+                return;
             }
 
             var previousPageType = currentPageType;
             var previousPage = currentPage;
-            var newPage = pageMap[targetPage];
+            var newPage = pageMap[pageType];
 
-            Debug.Log($"[UIPageManager] Navigating: {previousPageType} -> {targetPage}");
+            Debug.Log($"[UIPageManager] Navigating: {previousPageType} → {pageType}");
 
-            //start page transition
-            if(enableTransitions && previousPage != null)
+            // Stop any ongoing transition
+            if (transitionCoroutine != null)
             {
-                StartPageTransition(previousPage, newPage, targetPage);
+                StopCoroutine(transitionCoroutine);
+            }
+
+            // Page transition
+            if (enableTransitions && previousPage != null)
+            {
+                transitionCoroutine = StartCoroutine(TransitionBetweenPages(previousPage, newPage, pageType, previousPageType));
             }
             else
             {
-                CompletePageSwitch(previousPage, newPage, targetPage);
+                CompletePageSwitch(previousPage, newPage, pageType, previousPageType);
             }
 
-            //update sidebar
-            if (sideBar != null)
-                sideBar.SetActivePageType(targetPage);
+            // Update sidebar
+            if (sidebar != null)
+                sidebar.SetActivePageType(pageType);
 
-            //Repmember page
+            // Remember page
             if (rememberLastPage)
-                PlayerPrefs.SetString("LastUIPage", targetPage.ToString());
-
-            //Fire Event
-            OnPageChaged?.Invoke(previousPageType, targetPage);
-
+                PlayerPrefs.SetString("LastUIPage", pageType.ToString());
         }
 
-        private void StartPageTransition(UIPage fromPage, UIPage toPage, UIPageType toPageType)
+        /// <summary>
+        /// Coroutine-based page transition with fade effect
+        /// </summary>
+        private IEnumerator TransitionBetweenPages(UIPage fromPage, UIPage toPage, UIPageType toPageType, UIPageType fromPageType)
         {
-            //Simple Fade Transition
-            // Todo, make better transitions
+            // Phase 1: Fade out current page
             if (fromPage != null)
             {
                 fromPage.OnPageExit();
-                LeanTween.alpha(fromPage.GetComponent<RectTransform>(), 0.0f, transitionDuration / 2)
-                    .setOnComplete(() =>
-                    {
-                        fromPage.gameObject.SetActive(false);
-                        ShowNewPage(toPage, toPageType);
-                    });
+
+                CanvasGroup fromGroup = GetOrAddCanvasGroup(fromPage.gameObject);
+                float elapsed = 0f;
+
+                while (elapsed < transitionDuration / 2)
+                {
+                    elapsed += Time.deltaTime;
+                    float t = elapsed / (transitionDuration / 2);
+                    fromGroup.alpha = Mathf.Lerp(1f, 0f, transitionCurve.Evaluate(t));
+                    yield return null;
+                }
+
+                fromGroup.alpha = 0f;
+                fromPage.gameObject.SetActive(false);
             }
-            else
+
+            // Phase 2: Fade in new page
+            toPage.gameObject.SetActive(true);
+            toPage.OnPageEnter();
+
+            CanvasGroup toGroup = GetOrAddCanvasGroup(toPage.gameObject);
+            toGroup.alpha = 0f;
+
+            float elapsed2 = 0f;
+            while (elapsed2 < transitionDuration / 2)
             {
-                ShowNewPage(toPage, toPageType);
+                elapsed2 += Time.deltaTime;
+                float t = elapsed2 / (transitionDuration / 2);
+                toGroup.alpha = Mathf.Lerp(0f, 1f, transitionCurve.Evaluate(t));
+                yield return null;
             }
-           
+
+            toGroup.alpha = 1f;
+
+            // Complete transition
+            CompletePageSwitch(fromPage, toPage, toPageType, fromPageType);
+            transitionCoroutine = null;
         }
 
-        private void ShowNewPage(UIPage newPage, UIPageType pageType)
+        /// <summary>
+        /// Get or add CanvasGroup component for transitions
+        /// </summary>
+        private CanvasGroup GetOrAddCanvasGroup(GameObject obj)
         {
-            newPage.gameObject.SetActive(true);
-            newPage.OnPageEnter();
-
-            if (enableTransitions)
+            CanvasGroup group = obj.GetComponent<CanvasGroup>();
+            if (group == null)
             {
-                var rectTransform = newPage.GetComponent<RectTransform>();
-                rectTransform.alpha = 0.0f;
-                LeanTween.alpha(rectTransform, 1.0f, transitionDuration / 2)
-                    .setOnComplete(() => CompletePageSwitch(null, newPage, pageType));
+                group = obj.AddComponent<CanvasGroup>();
             }
-            else
-            {
-                CompletePageSwitch(null, newPage, pageType);
-            }
+            return group;
         }
 
-        private void CompletePageSwitch(UIPage previousPage, UIPage newPage, UIPageType pageType)
+        private void CompletePageSwitch(UIPage previousPage, UIPage newPage, UIPageType pageType, UIPageType previousPageType)
         {
             if (previousPage != null && previousPage != newPage)
             {
                 previousPage.gameObject.SetActive(false);
+
+                // Ensure previous page alpha is reset
+                CanvasGroup prevGroup = previousPage.GetComponent<CanvasGroup>();
+                if (prevGroup != null)
+                    prevGroup.alpha = 1f;
             }
 
             newPage.gameObject.SetActive(true);
-            newPage.OnPageEnter();
+
+            // Ensure new page is fully visible
+            CanvasGroup newGroup = newPage.GetComponent<CanvasGroup>();
+            if (newGroup != null)
+                newGroup.alpha = 1f;
+
+            // Call OnPageEnter if not already called
+            if (!enableTransitions || previousPage == null)
+            {
+                newPage.OnPageEnter();
+            }
 
             currentPage = newPage;
             currentPageType = pageType;
 
-            Debug.Log($"[UIPageManager] Page Switch Complete: {pageType}");
+            Debug.Log($"[UIPageManager] Page switch complete: {pageType}");
 
+            // Fire event
+            OnPageChanged?.Invoke(previousPageType, pageType);
         }
 
-        /////////////////////////////////////////////////////////////////////////////////////////////
-        /// Helpers and Getter/setters
-        /// /////////////////////////////////////////////////////////////////////////////////////////
-        /// 
+        /// <summary>
+        /// Get current active page
+        /// </summary>
         public UIPage GetCurrentPage() => currentPage;
 
+        /// <summary>
+        /// Get current page type
+        /// </summary>
         public UIPageType GetCurrentPageType() => currentPageType;
 
+        /// <summary>
+        /// Check if specific page type is active
+        /// </summary>
         public bool IsPageActive(UIPageType pageType) => currentPageType == pageType;
 
+        /// <summary>
+        /// Go back to previous page (if available)
+        /// </summary>
         public void GoBack()
         {
-            //ToDo; make a go back stack to allow the user to go back several pages
+            // Simple implementation - go to default page
+            // You could implement a proper page history stack here
             if (currentPageType != defaultPage)
+            {
                 NavigateToPage(defaultPage);
+            }
         }
 
+        /// <summary>
+        /// Disable transitions (useful for initial load or performance)
+        /// </summary>
+        public void SetTransitionsEnabled(bool enabled)
+        {
+            enableTransitions = enabled;
+        }
+
+        void OnDestroy()
+        {
+            // Clean up
+            if (sidebar != null)
+            {
+                sidebar.OnNavigationRequested -= NavigateToPage;
+            }
+
+            if (transitionCoroutine != null)
+            {
+                StopCoroutine(transitionCoroutine);
+            }
+        }
     }
 
-
-    //Enum of the different page types
+    /// <summary>
+    /// Available UI page types
+    /// </summary>
     public enum UIPageType
     {
         UserProfile,
@@ -225,7 +309,4 @@ namespace InventorySystem.UI.Navigation
         Settings,
         Statistics
     }
-
-
-
 }

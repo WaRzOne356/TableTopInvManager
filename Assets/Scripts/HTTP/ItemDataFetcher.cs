@@ -999,6 +999,19 @@ public class ItemDataFetcher : MonoBehaviour
         return string.IsNullOrEmpty(cleaned) ? "Unknown Item" : cleaned;
     }
 
+    private string TruncateDescription(string description, int length)
+    {
+        // If the description is null, empty, or shorter than the desired length, return it as is.
+        if (string.IsNullOrEmpty(description) || description.Length <= length)
+        {
+            return description;
+        }
+
+        // Otherwise, take a substring from the beginning up to the specified length
+        // and append an ellipsis.
+        return description.Substring(0, length) + "...";
+    }
+
     private string CleanHTMLDescription(string htmlDesc, int maxLength = 512)
     {
         if (string.IsNullOrEmpty(htmlDesc))
