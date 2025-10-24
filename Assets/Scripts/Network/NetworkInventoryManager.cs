@@ -43,14 +43,14 @@ public class NetworkInventoryManager : NetworkBehaviour
 
     //Events for UI Updates
     public System.Action<List<InventoryItem>> OnInventoryChanged;
-    public System.Action<List<NetworkUserInfo>> OnUserChanged;
+    public System.Action<List<NetworkUserInfo>> OnUsersChanged;
     public System.Action<string> OnInventoryMessage;
 
     //Client Side Variables/cache
     private List<InventoryItem> localInventoryCache;
 
     // Singleton Pattern
-    private static NetworkInventoryManager Instance { get; set;  }
+    public static NetworkInventoryManager Instance { get; set;  }
 
     public void Awake()
     {
@@ -410,7 +410,7 @@ public class NetworkInventoryManager : NetworkBehaviour
     [ClientRpc]
     public void BroadcastUserListClientRpc(NetworkUserInfo[] users)
     {
-        OnUserChanged?.Invoke(users.ToList());
+        OnUsersChanged?.Invoke(users.ToList());
 
         if (logNetworkActivity) Debug.Log($"[NeworkInventory] user list updated: {users.Length} users online");
     }
@@ -573,7 +573,7 @@ public class NetworkInventoryManager : NetworkBehaviour
         }
     }
 
-    public List<InventoryItem> GetCurrentory()
+    public List<InventoryItem> GetCurrentInventory()
     {
         return new List<InventoryItem>(localInventoryCache);
     }

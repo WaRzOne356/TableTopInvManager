@@ -3,6 +3,7 @@ using System.Drawing;
 using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
+using UnityEngine.EventSystems;
 
 namespace InventorySystem.UI.Navigation
 {
@@ -21,16 +22,16 @@ namespace InventorySystem.UI.Navigation
 
 
         [Header("Sytling")]
-        [SerializeField] private Color activeColor = Color.blue;
-        [SerializeField] private Color normalColor = Color.white;
-        [SerializeField] private Color hoverColor = Color.lightGray;
+        [SerializeField] private UnityEngine.Color activeColor = UnityEngine.Color.blue;
+        [SerializeField] private UnityEngine.Color normalColor = UnityEngine.Color.white;
+        [SerializeField] private UnityEngine.Color hoverColor = UnityEngine.Color.lightGray;
 
         //state
         private bool isActive = false;
         private SidebarMenuItem menuItem;
         private Action<UIPageType> onClickCallback;
 
-        private void Setup(SidebarMenuItem item, Action<UIPageType> clickCallback)
+        public void Setup(SidebarMenuItem item, Action<UIPageType> clickCallback)
         {
             menuItem = item;
             onClickCallback = clickCallback;
@@ -64,7 +65,7 @@ namespace InventorySystem.UI.Navigation
         }
 
         //set this menu item as active or inactive
-        private void SetActive(bool active)
+        public void SetActive(bool active)
         {
             isActive = active;
             if (backgroundImage != null)
@@ -72,7 +73,7 @@ namespace InventorySystem.UI.Navigation
             if (activeIndicator != null)
                 activeIndicator.SetActive(active);
 
-            Color textColor = active ? Color.white : Color.gray;
+            UnityEngine.Color textColor = active ? UnityEngine.Color.white : UnityEngine.Color.gray;
             if (iconText != null)
                 iconText.color = textColor;
             if (nameText != null)
@@ -80,7 +81,7 @@ namespace InventorySystem.UI.Navigation
         }
 
         //Set collpased state of this menu item
-        private void SetCollapsed(bool collapsed)
+        public void SetCollapsed(bool collapsed)
         {
             if (collapsedVersion != null)
                 collapsedVersion.SetActive(collapsed);
@@ -89,17 +90,20 @@ namespace InventorySystem.UI.Navigation
         }
 
         //Set Enabled state of this menu item
-        private void SetEnabled(bool enabled)
+        public void SetEnabled(bool enabled)
         {
             if (button != null)
                 button.interactable = enabled;
             var alpha = enabled ? 1f : 0.5f;
-            GetComponent<CanvasGroup>()?.SetAlpha(alpha);
+            CanvasGroup canvasGroup = GetComponent<CanvasGroup>();
+
+            if (canvasGroup != null)
+                canvasGroup.alpha = alpha;
 
         }
 
         //get emoji icon for a given page type
-        private void GetIconForPageType(UIPageType pageType)
+        private string GetIconForPageType(UIPageType pageType)
         {
             return pageType switch
             {

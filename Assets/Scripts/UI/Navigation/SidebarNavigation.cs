@@ -2,7 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Drawing;
-using System.Web.UI.WebControls;
+using System.Web;
 using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
@@ -31,9 +31,9 @@ namespace InventorySystem.UI.Navigation
         [SerializeField] private bool startCollapsed = false;
 
         [Header("Styling")]
-        [SerializeField] private Color activeItemColor = Color.blue;
-        [SerializeField] private Color inactiveItemColor = Color.gray;
-        [SerializeField] private Color hoverItemColor = Color.lightGray;
+        [SerializeField] private UnityEngine.Color activeItemColor = UnityEngine.Color.blue;
+        [SerializeField] private UnityEngine.Color inactiveItemColor = UnityEngine.Color.gray;
+        [SerializeField] private UnityEngine.Color hoverItemColor = UnityEngine.Color.lightGray;
 
         // Events
         public event Action<UIPageType> OnNavigationRequested;
@@ -66,7 +66,7 @@ namespace InventorySystem.UI.Navigation
                 CreateMenuItemUI(menuItem);
             }
 
-            Debug.Log($"[Sidebar] Created {menuItemsUI.Count} menu items");
+            UnityEngine.Debug.Log($"[Sidebar] Created {menuItemsUI.Count} menu items");
         }
 
         private void CreateMenuItemUI(SidebarMenuItem menuItem)
@@ -88,7 +88,7 @@ namespace InventorySystem.UI.Navigation
 
         private void OnMenuItemClicked(UIPageType pageType)
         {
-            Debug.Log($"[Sidebar] Menu item clicked: {pageType}");
+            UnityEngine.Debug.Log($"[Sidebar] Menu item clicked: {pageType}");
             OnNavigationRequested?.Invoke(pageType);
         }
 
@@ -106,7 +106,7 @@ namespace InventorySystem.UI.Navigation
                 kvp.Value.SetActive(kvp.Key == pageType);
             }
 
-            Debug.Log($"[Sidebar] Active page: {previousActive} ? {pageType}");
+            UnityEngine.Debug.Log($"[Sidebar] Active page: {previousActive} ? {pageType}");
         }
 
         /// <summary>
@@ -142,7 +142,7 @@ namespace InventorySystem.UI.Navigation
                 menuItemUI.SetCollapsed(collapsed);
             }
 
-            Debug.Log($"[Sidebar] Collapsed: {collapsed}");
+            UnityEngine.Debug.Log($"[Sidebar] Collapsed: {collapsed}");
         }
 
         private void AnimateCollapse(bool collapse)
@@ -182,12 +182,12 @@ namespace InventorySystem.UI.Navigation
                 if (NetworkInventoryManager.Instance != null && NetworkInventoryManager.Instance.IsConnected())
                 {
                     connectionStatusText.text = "?? Online";
-                    connectionStatusText.color = Color.green;
+                    connectionStatusText.color = UnityEngine.Color.green;
                 }
                 else
                 {
                     connectionStatusText.text = "?? Offline";
-                    connectionStatusText.color = Color.red;
+                    connectionStatusText.color = UnityEngine.Color.red;
                 }
             }
         }

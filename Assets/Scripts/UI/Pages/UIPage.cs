@@ -18,9 +18,9 @@ namespace InventorySystem.UI.Navigation
         public UIPageType PageType => PageType;
         public string PageTitle => pageTitle;
 
-        public virtual void Inititialize()
+        public virtual void Initialize()
         {
-            Debug.Log($"[UIPages] Page initializing: {pageType}");
+            Debug.Log($"[UIPages] Page Initializing: {pageType}");
 
         }
          
