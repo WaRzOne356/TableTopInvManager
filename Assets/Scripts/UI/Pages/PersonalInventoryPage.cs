@@ -96,9 +96,9 @@ namespace InventorySystem.UI.Pages
             personalItems.Clear();
 
             // Get items from group inventory that belong to this player
-            if (NetworkInventoryManager.Instance != null)
+            if (InventoryManager.Instance != null)
             {
-                var groupInventory = NetworkInventoryManager.Instance.GetCurrentInventory();
+                var groupInventory = InventoryManager.Instance.GetCurrentInventory();
                 if (groupInventory != null)
                 {
                     personalItems.AddRange(groupInventory.Where(item =>
@@ -166,9 +166,9 @@ namespace InventorySystem.UI.Pages
             if (cardUI != null)
             {
                 // Use the unified ItemCardUI with Group mode
-                cardUI.SetupPersonalCard(item, isGridView);
+                cardUI.SetupCard(item);
                 cardUI.OnItemModified += OnItemModified;
-                cardUI.OnOwnershipChanged += OnOwnershipChanged;
+                //cardUI.OnOwnershipChanged += OnOwnershipChanged;
             }
 
             itemCardObjects.Add(cardObj);
@@ -258,13 +258,13 @@ namespace InventorySystem.UI.Pages
             Debug.Log($"[PersonalInventory] Item modified: {item.itemName}, Quantity: {item.quantity}");
 
             // Update the item in the network inventory
-            if (NetworkInventoryManager.Instance != null)
+            if (InventoryManager.Instance != null)
             {
-                NetworkInventoryManager.Instance.UpdateItemQuantity(item.itemId, item.quantity);
+                InventoryManager.Instance.UpdateItemQuantity(item.itemId, item.quantity);
             }
             else
             {
-                Debug.LogWarning("[PersonalInventory] NetworkInventoryManager not available, changes not synced");
+                Debug.LogWarning("[PersonalInventory] InventoryManager not available, changes not synced");
             }
 
             // Refresh to show updated stats
@@ -311,9 +311,9 @@ namespace InventorySystem.UI.Pages
                 // inventoryItem.isCustomItem = true;
 
                 // Add to network inventory
-                if (NetworkInventoryManager.Instance != null)
+                if (InventoryManager.Instance != null)
                 {
-                    NetworkInventoryManager.Instance.AddItem(inventoryItem);
+                    InventoryManager.Instance.AddItem(inventoryItem);
 
                     await System.Threading.Tasks.Task.Delay(300);
                     RefreshContent();
@@ -346,9 +346,9 @@ namespace InventorySystem.UI.Pages
                 item.currentOwner = GetCurrentPlayerName();
 
                 // Add to network inventory
-                if (NetworkInventoryManager.Instance != null)
+                if (InventoryManager.Instance != null)
                 {
-                    NetworkInventoryManager.Instance.AddItem(item);
+                    InventoryManager.Instance.AddItem(item);
 
                     await System.Threading.Tasks.Task.Delay(300);
                     RefreshContent();

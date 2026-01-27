@@ -305,6 +305,7 @@ namespace InventorySystem.UI.Navigation
         UserProfile,
         PersonalInventory,
         GroupInventory,
+        GroupManagement,
         ItemBrowser,
         Settings,
         Statistics

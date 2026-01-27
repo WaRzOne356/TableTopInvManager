@@ -17,6 +17,7 @@ namespace InventorySystem.Data
         public JsonInventoryStorage(string customSaveFolder = null, bool prettyPrint = true, bool logging = true)
         {
             saveFolder = customSaveFolder ?? Path.Combine(Application.persistentDataPath, "InventoryData");
+            Debug.Log($"creating save folder here: {saveFolder}");
             prettyPrintJson = prettyPrint;
             enableLogging = logging;
 

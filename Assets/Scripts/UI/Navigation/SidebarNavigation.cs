@@ -179,7 +179,7 @@ namespace InventorySystem.UI.Navigation
         {
             if (connectionStatusText != null)
             {
-                if (NetworkInventoryManager.Instance != null && NetworkInventoryManager.Instance.IsConnected())
+                if (InventoryManager.Instance != null && InventoryManager.Instance.IsConnected())
                 {
                     connectionStatusText.text = "?? Online";
                     connectionStatusText.color = UnityEngine.Color.green;
@@ -195,7 +195,7 @@ namespace InventorySystem.UI.Navigation
         private string GetCurrentUserName()
         {
             // Try to get from network manager
-            if (NetworkInventoryManager.Instance != null)
+            if (InventoryManager.Instance != null)
             {
                 // You'd implement this based on your user system
                 return "Player"; // Placeholder

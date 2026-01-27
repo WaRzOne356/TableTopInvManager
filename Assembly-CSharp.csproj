@@ -48,7 +48,7 @@
   <PropertyGroup>
     <ProjectTypeGuids>{E097FAD1-6243-4DAD-9C02-E9B9EFC3FFC1};{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}</ProjectTypeGuids>
     <UnityProjectGenerator>Package</UnityProjectGenerator>
-    <UnityProjectGeneratorVersion>2.0.23</UnityProjectGeneratorVersion>
+    <UnityProjectGeneratorVersion>2.0.25</UnityProjectGeneratorVersion>
     <UnityProjectGeneratorStyle>Legacy</UnityProjectGeneratorStyle>
     <UnityProjectType>Game:1</UnityProjectType>
     <UnityBuildTarget>StandaloneWindows64:19</UnityBuildTarget>
@@ -62,30 +62,49 @@
   </ItemGroup>
   <ItemGroup>
     <Compile Include="Assets\Scripts\UI\InventoryUIManager.cs" />
+    <Compile Include="Assets\Scripts\UI\Dialogs\AddMemberToGroup.cs" />
     <Compile Include="Assets\Scripts\UI\Pages\UIPage.cs" />
+    <Compile Include="Assets\Scripts\UI\Dialogs\EditGroupDialog.cs" />
     <Compile Include="Assets\Scripts\UI\Pages\GroupInventoryPage.cs" />
     <Compile Include="Assets\Scripts\Data\InventoryItem.cs" />
+    <Compile Include="Assets\Scripts\Data\InventoryManager.cs" />
     <Compile Include="Assets\Scripts\UI\Navigation\UIPageManager.cs" />
     <Compile Include="Assets\Scripts\HTTP\HTTPManager.cs" />
+    <Compile Include="Assets\Scripts\UI\Dialogs\CreateGroupDialog.cs" />
+    <Compile Include="Assets\Scripts\UI\MemberCardUI.cs" />
     <Compile Include="Assets\Scripts\UI\Pages\UserProfilePage.cs" />
-    <Compile Include="Assets\Scripts\UI\AddItemDialog.cs" />
+    <Compile Include="Assets\Scripts\Data\PlayerCharacter.cs" />
+    <Compile Include="Assets\Scripts\Data\CharacterManager.cs" />
     <Compile Include="Assets\Scripts\UI\Pages\PersonalInventoryPage.cs" />
+    <Compile Include="Assets\Scripts\UI\Dialogs\AvatarSelectionDialog.cs" />
+    <Compile Include="Assets\Scripts\UI\Dialogs\ConfirmDeleteDialog.cs" />
     <Compile Include="Assets\Scripts\UI\Navigation\SidebarNavigation.cs" />
     <Compile Include="Assets\Scripts\UI\ItemCardUI.cs" />
+    <Compile Include="Assets\Scripts\Data\Group.cs" />
+    <Compile Include="Assets\Scripts\UI\CreateUserDialog.cs" />
+    <Compile Include="Assets\Scripts\UI\NoteRowUI.cs" />
     <Compile Include="Assets\Scripts\Network\NetworkInventoryData.cs" />
+    <Compile Include="Assets\Scripts\UI\Pages\GroupManagerPage.cs" />
     <Compile Include="Assets\Scripts\Data\JSONInventoryStorage.cs" />
+    <Compile Include="Assets\Scripts\UI\Dialogs\AddItemDialog.cs" />
+    <Compile Include="Assets\Scripts\Data\UserManager.cs" />
     <Compile Include="Assets\Scripts\UI\ViewMode.cs" />
     <Compile Include="Assets\Scripts\InventoryTester.cs" />
+    <Compile Include="Assets\Scripts\Network\Do not use -NetworkInventoryManager.cs" />
     <Compile Include="Assets\TutorialInfo\Scripts\Readme.cs" />
-    <Compile Include="Assets\Scripts\Network\JSONInventoryStorage.cs" />
+    <Compile Include="Assets\Scripts\UI\Dialogs\CreateCharacterDialog.cs" />
     <Compile Include="Assets\Scripts\Data\InventoryPersistence.cs" />
-    <Compile Include="Assets\Scripts\Network\NetworkInventoryManager.cs" />
     <Compile Include="Assets\Scripts\UI\Navigation\SidebarMenuItemUI.cs" />
+    <Compile Include="Assets\Scripts\Data\GroupManager.cs" />
     <Compile Include="Assets\Scripts\Data\GroupInventory.cs" />
+    <Compile Include="Assets\Scripts\Data\ItemOwnership.cs" />
+    <Compile Include="Assets\Scripts\UI\CharacterCardUI.cs" />
+    <Compile Include="Assets\Scripts\UI\UserSwitcherDropDown.cs" />
     <Compile Include="Assets\Scripts\Data\IInventoryStorage.cs" />
     <Compile Include="Assets\Scripts\UI\PropertyRowUI.cs" />
     <Compile Include="Assets\Scripts\UI\SearchResultUI.cs" />
     <Compile Include="Assets\Scripts\Data\CustomItemDatabase.cs" />
+    <Compile Include="Assets\Scripts\UI\Dialogs\AddCharacterToGroupDialog.cs" />
     <Compile Include="Assets\Scripts\HTTP\ItemDataFetcher.cs" />
     <Compile Include="Assets\Scripts\Data\ApiModels.cs" />
   </ItemGroup>
@@ -612,7 +631,7 @@
       <Private>False</Private>
     </Reference>
     <Reference Include="Unity.VisualScripting.Antlr3.Runtime">
-      <HintPath>Library\PackageCache\com.unity.visualscripting@b4d700247d4b\Runtime\VisualScripting.Flow\Dependencies\NCalc\Unity.VisualScripting.Antlr3.Runtime.dll</HintPath>
+      <HintPath>Library\PackageCache\com.unity.visualscripting@191c0d7e3b69\Runtime\VisualScripting.Flow\Dependencies\NCalc\Unity.VisualScripting.Antlr3.Runtime.dll</HintPath>
       <Private>False</Private>
     </Reference>
     <Reference Include="Mono.Cecil">

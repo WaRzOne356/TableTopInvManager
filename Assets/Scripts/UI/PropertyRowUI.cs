@@ -69,6 +69,15 @@ public class PropertyRowUI : MonoBehaviour
     }
 
     /// <summary>
+    /// Make the property row read-only (hide remove button)
+    /// </summary>
+    public void SetReadOnly(bool readOnly)
+    {
+        if (removeButton != null)
+            removeButton.gameObject.SetActive(!readOnly);
+    }
+
+    /// <summary>
     /// Check if this property row has valid data
     /// </summary>
     public bool IsValid()

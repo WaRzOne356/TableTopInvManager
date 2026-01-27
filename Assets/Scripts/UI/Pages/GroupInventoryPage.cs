@@ -19,6 +19,7 @@ namespace InventorySystem.UI.Pages
         [SerializeField] private ScrollRect inventoryScrollView;
         [SerializeField] private GameObject itemCardPrefab; // Should have ItemCardUI component
 
+
         [Header("Dialogs")]
         [SerializeField] private AddItemDialog addItemDialog;
 
@@ -48,7 +49,9 @@ namespace InventorySystem.UI.Pages
         // State
         private List<InventoryItem> groupItems;
         private List<GameObject> itemCardObjects;
-        private NetworkInventoryManager networkManager;
+        private InventoryManager inventoryManager;
+        private UserManager userManager;
+        private ItemCardUI currentlyExpandedCard;
 
         void Awake()
         {
@@ -69,6 +72,8 @@ namespace InventorySystem.UI.Pages
                 addItemDialog.OnItemCreated += OnCustomItemCreatedForGroup;
                 addItemDialog.OnItemSelected += OnItemSelectedFromSearch;
                 addItemDialog.OnDialogClosed += OnAddItemDialogClosed;
+
+                Debug.Log("[GroupInventory] Event handlers subscribed to AddItemDialog");
             }
             else
             {
@@ -78,12 +83,28 @@ namespace InventorySystem.UI.Pages
 
         void Start()
         {
-            networkManager = NetworkInventoryManager.Instance;
-            if (networkManager != null)
+            inventoryManager = InventoryManager.Instance;
+            
+            if (inventoryManager != null)
             {
-                networkManager.OnInventoryChanged += OnNetworkInventoryChanged;
-                networkManager.OnInventoryMessage += OnNetworkMessage;
-                networkManager.OnUsersChanged += OnUsersChanged;
+                Debug.Log($"[GroupInventory] InventoryManager found: {inventoryManager.gameObject.name}");
+                inventoryManager.OnInventoryChanged += OnNetworkInventoryChanged;
+                inventoryManager.OnInventoryMessage += OnNetworkMessage;
+                
+            }
+            else
+            {
+                Debug.LogError("[GroupInventory] InventoryManager.Instance is NULL!");
+                Debug.LogError("Make sure InventoryManager GameObject exists in scene and has NetworkBehaviour component!");
+            }
+            userManager = UserManager.Instance;
+            if (userManager != null)
+            {
+                userManager.OnUsersChanged += OnUsersChanged;
+            }
+            else
+            {
+                Debug.LogError("[GroupInventory] UserManager.Instance is NULL!");
             }
         }
 
@@ -112,9 +133,9 @@ namespace InventorySystem.UI.Pages
         {
             groupItems.Clear();
 
-            if (networkManager != null)
+            if (inventoryManager != null)
             {
-                var inventory = networkManager.GetCurrentInventory();
+                var inventory = inventoryManager.GetCurrentInventory();
                 if (inventory != null)
                 {
                     groupItems.AddRange(inventory);
@@ -187,15 +208,18 @@ namespace InventorySystem.UI.Pages
 
             if (cardUI != null)
             {
-                {
-                    // Use the unified ItemCardUI with Group mode
-                    cardUI.SetupGroupCard(item);
-                    cardUI.OnItemModified += OnGroupItemModified;
-                }
+                cardUI.SetupCard(item, ItemCardUI.CardMode.Group);
+
+                // Subscribe to events
+                cardUI.OnCardSelected += OnCardExpanded;
+                cardUI.OnItemModified += OnGroupItemModified;
+                cardUI.OnItemDeleted += OnItemDeleted;
 
                 itemCardObjects.Add(cardObj);
             }
         }
+
+
 
         private void ClearItemCards()
         {
@@ -223,7 +247,7 @@ namespace InventorySystem.UI.Pages
                 totalValueText.text = $"Total Value: {totalValue:N0} gp";
 
             // Update group members count
-            if (groupMembersText != null && networkManager != null)
+            if (groupMembersText != null && inventoryManager != null)
             {
                 // This would come from the network manager's user list
                 groupMembersText.text = "Group Members: 3"; // Placeholder
@@ -232,7 +256,7 @@ namespace InventorySystem.UI.Pages
 
         private void UpdateConnectionStatus()
         {
-            bool isConnected = networkManager != null && networkManager.IsConnected();
+            bool isConnected = inventoryManager != null;
 
             if (connectionStatusText != null)
             {
@@ -250,6 +274,19 @@ namespace InventorySystem.UI.Pages
                 reconnectButton.gameObject.SetActive(!isConnected);
             }
         }
+        //<todo: review, I don't think this is right>
+        private void UpdateItemCardWithOwnership(ItemCardUI cardUI, InventoryItem item)
+        {
+            // Get ownership summary
+            var groupInventory = new GroupInventory(); // Or get from InventoryManager
+                                                       // You'll need to expose this through InventoryManager
+
+            string ownershipText = groupInventory.GetOwnershipSummary(item.itemId);
+
+            // Update the card's owner text
+            // This assumes ItemCardUI has a method to set ownership display
+            // cardUI.SetOwnershipText(ownershipText);
+        }
 
         // Event Handlers
         private void OnNetworkInventoryChanged(List<InventoryItem> updatedInventory)
@@ -263,13 +300,13 @@ namespace InventorySystem.UI.Pages
             ShowMessage(message, MessageType.Info);
         }
 
-        private void OnUsersChanged(List<NetworkUserInfo> users)
+        private void OnUsersChanged(List<SerializableUserInfo> users)
         {
             UpdateOwnerFilter(users);
             UpdateGroupStats();
         }
 
-        private void UpdateOwnerFilter(List<NetworkUserInfo> users)
+        private void UpdateOwnerFilter(List<SerializableUserInfo> users)
         {
             if (ownerFilter == null) return;
 
@@ -298,17 +335,41 @@ namespace InventorySystem.UI.Pages
             RefreshItemDisplay();
         }
 
+        private void OnCardExpanded(ItemCardUI expandedCard)
+        {
+            Debug.Log($"[GroupInventory] Card expanded: {expandedCard.CurrentItem.itemName}");
+
+            // Collapse previously expanded card
+            if (currentlyExpandedCard != null && currentlyExpandedCard != expandedCard)
+            {
+                currentlyExpandedCard.CollapseCard();
+            }
+
+            currentlyExpandedCard = expandedCard;
+        }
+
+        private void OnItemDeleted(InventoryItem item)
+        {
+            Debug.Log($"[GroupInventory] Deleting item: {item.itemName}");
+
+            // Remove from InventoryManager
+            InventoryManager.Instance?.RemoveItem(item.itemId);
+
+            // Refresh display
+            RefreshContent();
+        }
+
         private void OnGroupItemModified(InventoryItem item)
         {
             Debug.Log($"[GroupInventory] Item modified: {item.itemName}, Owner: {item.currentOwner ?? "Unassigned"}");
 
-            if (networkManager != null)
+            if (inventoryManager != null)
             {
-                networkManager.UpdateItemQuantity(item.itemId, item.quantity);
+                inventoryManager.UpdateItemQuantityAsync(item.itemId, item.quantity);
             }
             else
             {
-                Debug.LogWarning("[GroupInventory] NetworkInventoryManager not available, changes not synced");
+                Debug.LogWarning("[GroupInventory] InventoryManager not available, changes not synced");
             }
 
             // Just update stats, don't refresh entire display
@@ -346,9 +407,9 @@ namespace InventorySystem.UI.Pages
                 //inventoryItem.isCustomItem = true;
 
                 // Add to network inventory
-                if (networkManager != null)
+                if (inventoryManager != null)
                 {
-                    networkManager.AddItem(inventoryItem);
+                    inventoryManager.AddItemAsync(inventoryItem);
 
                     await System.Threading.Tasks.Task.Delay(300);
                     RefreshContent();
@@ -374,16 +435,20 @@ namespace InventorySystem.UI.Pages
                 // todo update owner to be the group id
                 item.currentOwner = "";
 
+                Debug.Log($"[GroupInventory] InventoryManager exists: {InventoryManager.Instance != null}");
+
                 // Add to network inventory
-                if (NetworkInventoryManager.Instance != null)
+                if (InventoryManager.Instance != null)
                 {
-                    NetworkInventoryManager.Instance.AddItem(item);
+                    Debug.Log($"[GroupInventory] Calling InventoryManager.AddItem()");
+                    InventoryManager.Instance.AddItem(item);
 
                     await System.Threading.Tasks.Task.Delay(300);
                     RefreshContent();
                 }
                 else
                 {
+                    Debug.LogError("[GroupInventory] InventoryManager.Instance is NULL!");
                     ShowMessage("Network manager not available", MessageType.Error);
                 }
             }
@@ -430,19 +495,23 @@ namespace InventorySystem.UI.Pages
             ShowMessage("Attempting to reconnect...", MessageType.Info);
 
             // TODO: Implement network reconnection logic
-            if (networkManager != null)
+            if (inventoryManager != null)
             {
-                // networkManager.Reconnect();
+                // inventoryManager.Reconnect();
             }
         }
 
         void OnDestroy()
         {
-            if (networkManager != null)
+            if (inventoryManager != null)
             {
-                networkManager.OnInventoryChanged -= OnNetworkInventoryChanged;
-                networkManager.OnInventoryMessage -= OnNetworkMessage;
-                networkManager.OnUsersChanged -= OnUsersChanged;
+                inventoryManager.OnInventoryChanged -= OnNetworkInventoryChanged;
+                inventoryManager.OnInventoryMessage -= OnNetworkMessage;
+                
+            }
+            if (userManager != null)
+            {
+                userManager.OnUsersChanged -= OnUsersChanged;
             }
 
             // Clean up dialog events
@@ -453,5 +522,182 @@ namespace InventorySystem.UI.Pages
                 addItemDialog.OnDialogClosed -= OnAddItemDialogClosed;
             }
         }
+        /*
+        [ContextMenu("Run Inventory Diagnostics")]
+        public void RunInventoryDiagnostics()
+        {
+            Debug.Log("========================================");
+            Debug.Log("INVENTORY CONNECTION DIAGNOSTICS");
+            Debug.Log("========================================");
+
+            // Check AddItemDialog
+            Debug.Log($"1. AddItemDialog Reference: {(addItemDialog != null ? "✅ Assigned" : "❌ NULL")}");
+            if (addItemDialog != null)
+            {
+                Debug.Log($"   - Dialog GameObject: {addItemDialog.gameObject.name}");
+                Debug.Log($"   - Dialog Active: {addItemDialog.gameObject.activeInHierarchy}");
+
+                // Check event subscriptions via reflection
+                var eventField = typeof(AddItemDialog).GetField("OnItemSelected",
+                    System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Instance);
+
+                if (eventField != null)
+                {
+                    var eventDelegate = eventField.GetValue(addItemDialog) as System.Delegate;
+                    if (eventDelegate != null)
+                    {
+                        Debug.Log($"   - OnItemSelected subscribers: {eventDelegate.GetInvocationList().Length}");
+                        foreach (var handler in eventDelegate.GetInvocationList())
+                        {
+                            Debug.Log($"     • {handler.Method.DeclaringType.Name}.{handler.Method.Name}");
+                        }
+                    }
+                    else
+                    {
+                        Debug.LogError("   - ❌ OnItemSelected has NO subscribers!");
+                    }
+                }
+            }
+
+            Debug.Log("");
+
+            // Check NetworkInventoryManager
+            Debug.Log($"2. NetworkInventoryManager.Instance: {(NetworkInventoryManager.Instance != null ? " Exists" : " NULL")}");
+            if (NetworkInventoryManager.Instance != null)
+            {
+                var nim = NetworkInventoryManager.Instance;
+                Debug.Log($"   - GameObject: {nim.gameObject.name}");
+                Debug.Log($"   - GameObject Active: {nim.gameObject.activeInHierarchy}");
+
+                // Use reflection to check Netcode status without requiring the package
+                var networkBehaviourType = nim.GetType().BaseType;
+                if (networkBehaviourType != null && networkBehaviourType.Name == "NetworkBehaviour")
+                {
+                    Debug.Log($"   - Is NetworkBehaviour:  Yes");
+
+                    try
+                    {
+                        var isSpawnedProp = networkBehaviourType.GetProperty("IsSpawned");
+                        var isServerProp = networkBehaviourType.GetProperty("IsServer");
+                        var isClientProp = networkBehaviourType.GetProperty("IsClient");
+
+                        if (isSpawnedProp != null)
+                            Debug.Log($"   - IsSpawned: {isSpawnedProp.GetValue(nim)}");
+                        if (isServerProp != null)
+                            Debug.Log($"   - IsServer: {isServerProp.GetValue(nim)}");
+                        if (isClientProp != null)
+                            Debug.Log($"   - IsClient: {isClientProp.GetValue(nim)}");
+                    }
+                    catch (System.Exception e)
+                    {
+                        Debug.LogWarning($"   - Could not read Netcode properties: {e.Message}");
+                    }
+                }
+                else
+                {
+                    Debug.Log($"   - Is NetworkBehaviour:  No (not using Netcode)");
+                }
+
+                var inventory = nim.GetCurrentInventory();
+                Debug.Log($"   - Current Inventory Count: {inventory?.Count ?? 0}");
+
+                if (inventory != null && inventory.Count > 0)
+                {
+                    Debug.Log($"   - Sample items:");
+                    foreach (var item in inventory.Take(3))
+                    {
+                        Debug.Log($"     • {item.itemName} (x{item.quantity})");
+                    }
+                }
+            }
+
+            Debug.Log("");
+
+            // Check if Netcode package exists
+            var netcodeAssembly = System.AppDomain.CurrentDomain.GetAssemblies()
+                .FirstOrDefault(a => a.GetName().Name == "Unity.Netcode.Runtime");
+
+            if (netcodeAssembly != null)
+            {
+                Debug.Log($"3. Unity Netcode Package:  Installed");
+
+                // Try to get NetworkManager via reflection
+                var networkManagerType = netcodeAssembly.GetType("Unity.Netcode.NetworkManager");
+                if (networkManagerType != null)
+                {
+                    var singletonProp = networkManagerType.GetProperty("Singleton",
+                        System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Static);
+
+                    if (singletonProp != null)
+                    {
+                        var singleton = singletonProp.GetValue(null);
+                        Debug.Log($"   - NetworkManager.Singleton: {(singleton != null ? " Exists" : " NULL")}");
+
+                        if (singleton != null)
+                        {
+                            var isServerProp = networkManagerType.GetProperty("IsServer");
+                            var isClientProp = networkManagerType.GetProperty("IsClient");
+                            var isListeningProp = networkManagerType.GetProperty("IsListening");
+
+                            if (isServerProp != null)
+                                Debug.Log($"   - IsServer: {isServerProp.GetValue(singleton)}");
+                            if (isClientProp != null)
+                                Debug.Log($"   - IsClient: {isClientProp.GetValue(singleton)}");
+                            if (isListeningProp != null)
+                            {
+                                bool isListening = (bool)isListeningProp.GetValue(singleton);
+                                Debug.Log($"   - IsListening: {isListening}");
+
+                                if (!isListening)
+                                {
+                                    Debug.LogWarning("   -  Netcode not started! Call StartHost() or StartClient() to enable networking");
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            else
+            {
+                Debug.Log($"3. Unity Netcode Package:  Not Installed");
+            }
+
+            Debug.Log("");
+
+            // Check local state
+            Debug.Log($"4. GroupInventoryPage State:");
+            Debug.Log($"   - groupItems count: {groupItems?.Count ?? 0}");
+            Debug.Log($"   - itemCardObjects count: {itemCardObjects?.Count ?? 0}");
+            Debug.Log($"   - networkManager reference: {(networkManager != null ? " Assigned" : " NULL")}");
+
+            Debug.Log("");
+            Debug.Log($"5. Event Subscriptions:");
+            if (networkManager != null)
+            {
+                // Check if events are subscribed
+                var onInventoryChangedField = typeof(NetworkInventoryManager).GetField("OnInventoryChanged",
+                    System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Instance);
+
+                if (onInventoryChangedField != null)
+                {
+                    var eventDelegate = onInventoryChangedField.GetValue(networkManager) as System.Delegate;
+                    if (eventDelegate != null)
+                    {
+                        Debug.Log($"   - OnInventoryChanged subscribers: {eventDelegate.GetInvocationList().Length}");
+                    }
+                    else
+                    {
+                        Debug.LogWarning("   - ⚠️ OnInventoryChanged has NO subscribers!");
+                    }
+                }
+            }
+
+            Debug.Log("========================================");
+            Debug.Log("DIAGNOSTIC COMPLETE");
+            Debug.Log("========================================");
+        }
+
+        */
+
     }
 }

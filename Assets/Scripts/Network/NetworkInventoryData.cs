@@ -74,17 +74,45 @@ public struct NetworkInventoryItem : INetworkSerializable
     }
 }
 
-/// <summary>
-/// User permission levels for inventory management
-/// </summary>
-public enum NetworkUserPermission : byte
+
+[System.Serializable]
+public struct NetworkItemOwnership : INetworkSerializable
 {
-    ReadOnly = 0,      // Can view only
-    EditItems = 1,     // Can modify quantities and notes
-    AddItems = 2,      // Can add new items
-    DeleteItems = 3,   // Can remove items
-    Admin = 4          // Full control including user permissions
+    public FixedString64Bytes itemId;
+    public FixedString64Bytes playerName;
+    public int quantityOwned;
+    public long claimedDateTicks;
+
+    public static  NetworkItemOwnership FromOwnership(ItemOwnership ownership)
+    {
+        return new NetworkItemOwnership
+        {
+            itemId = ownership.itemId,
+            playerName = ownership.characterId,
+            quantityOwned = ownership.quantityOwned,
+            claimedDateTicks = ownership.claimedDate.Ticks
+        };
+    }
+
+    public ItemOwnership ToOwnership()
+    {
+        return new ItemOwnership(
+            itemId.ToString(),
+            playerName.ToString(),
+            quantityOwned)
+        { claimedDate = new DateTime(claimedDateTicks) };
+
+    }
+
+    public void NetworkSerialize<T>(BufferSerializer<T> serializer) where T: IReaderWriter
+    {
+        serializer.SerializeValue(ref itemId);
+        serializer.SerializeValue(ref playerName);
+        serializer.SerializeValue(ref quantityOwned);
+        serializer.SerializeValue(ref claimedDateTicks);
+    }
 }
+
 
 /// <summary>
 /// Information about connected users
@@ -94,7 +122,7 @@ public struct NetworkUserInfo : INetworkSerializable
 {
     public ulong clientId;
     public FixedString64Bytes userName;
-    public NetworkUserPermission permission;
+    public GroupPermission permission;
     public long connectionTimeTicks;
     public bool isOnline;
 
@@ -119,7 +147,10 @@ public enum NetworkInventoryAction : byte
     ItemOwnerChanged,
     ItemNoteAdded,
     PermissionChanged,
-    InventoryCleared
+    InventoryCleared,
+    ItemClaimed,
+    ItemReturned,
+    ItemTransferred
 }
 
 /// <summary>

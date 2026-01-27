@@ -15,11 +15,15 @@ namespace InventorySystem.Data
         public int version;
         public List<SerializableInventoryItem> items;
         public List<SerializableUserInfo> users;
+        public List<SerializablePlayerCharacter> characters;
+        public List<SerializableItemOwnership> itemOwnerships;
 
         public InventoryPersistenceData()
         {
             items = new List<SerializableInventoryItem>();
             users = new List<SerializableUserInfo>();
+            characters = new List<SerializablePlayerCharacter>();  
+            itemOwnerships = new List<SerializableItemOwnership>();
         }
     }
 
@@ -102,8 +106,9 @@ namespace InventorySystem.Data
     public class SerializableUserInfo
     {
         public ulong clientId;
+        public string userId;
         public string userName;
-        public NetworkUserPermission permission;
+        public GroupPermission permission;
         public string connectionTime;
         public bool isOnline;
 

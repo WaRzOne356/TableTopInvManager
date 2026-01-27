@@ -15,7 +15,7 @@ namespace InventorySystem.UI.Navigation
         [SerializeField] protected GameObject loadingIndicator;
         [SerializeField] protected bool showLoadingOnEnter = true;
 
-        public UIPageType PageType => PageType;
+        public UIPageType PageType => pageType;
         public string PageTitle => pageTitle;
 
         public virtual void Initialize()

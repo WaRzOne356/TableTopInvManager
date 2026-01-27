@@ -144,4 +144,19 @@ public class InventoryItem
         else
             return $"{valueInGold} gp each ({TotalValue} gp total)";
     }
+
+    public string GetQuantityDisplay(GroupInventory groupInventory = null)
+    {
+        if(groupInventory != null)
+        {
+            var ownership = groupInventory.GetOwnershipSummary(itemId);
+            return $"x{quantity} (Owner: {ownership}";
+        }
+
+        //fallback ifno group content
+        if (!string.IsNullOrEmpty(currentOwner))
+            return $"x{quantity} (Owner: {currentOwner}";
+
+        return $"x{quantity}";
+    }
 }

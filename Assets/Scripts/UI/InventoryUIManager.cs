@@ -234,7 +234,7 @@ public class InventoryUIManager : MonoBehaviour
 
                 if (cardComponent != null)
                 {
-                    cardComponent.SetupCard(item, this);
+                    cardComponent.SetupCard(item);
                 }
 
                 currentItemObjects.Add(cardObj);
