@@ -31,15 +31,21 @@ public class ItemCardUI : MonoBehaviour
     [SerializeField] private TextMeshProUGUI noPropertiesText; // "No special properties"
 
     [Header("Ownership Section")]
-    [SerializeField] private GameObject ownershipSection;
-    [SerializeField] private Transform ownersListContainer;
+
     [SerializeField] private GameObject ownerEntryPrefab;
     [SerializeField] private TextMeshProUGUI noOwnersText;
     [SerializeField] private TMP_Dropdown characterDropdown;
     [SerializeField] private TMP_InputField quantityInput;
-    [SerializeField] private Button assignOwnershipButton;
     [SerializeField] private TextMeshProUGUI availableQuantityText;
     [SerializeField] private TextMeshProUGUI ownershipErrorText;
+
+
+    [Header("Ownership Display")]
+    [SerializeField] private GameObject ownershipSection;  // Shows who owns what quantities
+    [SerializeField] private Transform ownersListContainer;
+    [SerializeField] private GameObject ownershipRowPrefab; // Prefab with: CharacterName + Quantity texts
+    [SerializeField] private TextMeshProUGUI unclaimedQuantityText; // "Unclaimed: 3"
+
 
     [Header("Notes Section (Prefab Container)")]
     [SerializeField] private Transform notesContainer;
@@ -53,8 +59,14 @@ public class ItemCardUI : MonoBehaviour
     [SerializeField] private Button decreaseQuantityButton;
     [SerializeField] private Button deleteItemButton;
     [SerializeField] private Button claimButton;
-    [SerializeField] private Button shareButton;
     [SerializeField] private Button addNoteButton;
+
+    [Header("Transfer Controls")]
+    [SerializeField] private Button transferButton;      // PERMANENT move (personal<->group)
+    [SerializeField] private Button shareButton;         // Group-owned, character holds it
+    [SerializeField] private Button returnButton;        // Returns shared item to pool
+    [SerializeField] private Button assignOwnershipButton;
+
 
     [Header("Visual")]
     [SerializeField] private Image thumbnailImage;
@@ -72,6 +84,12 @@ public class ItemCardUI : MonoBehaviour
     public System.Action<ItemCardUI> OnCardSelected;
     public System.Action<InventoryItem> OnItemModified;
     public System.Action<InventoryItem> OnItemDeleted;
+    public System.Action<InventoryItem> OnClaimRequested;
+    public System.Action<InventoryItem> OnTransferRequested; // Permanent move
+    public System.Action<InventoryItem, int> OnShareRequested; // Claim ownership
+    public System.Action<InventoryItem, int> OnReturnRequested; // Return to pool
+
+
 
     // State
     private InventoryItem currentItem;
@@ -117,8 +135,10 @@ public class ItemCardUI : MonoBehaviour
         decreaseQuantityButton?.onClick.AddListener(() => ChangeQuantity(-1));
         deleteItemButton?.onClick.AddListener(DeleteItem);
         claimButton?.onClick.AddListener(ClaimItem);
-        shareButton?.onClick.AddListener(ShareItem);
         addNoteButton?.onClick.AddListener(AddPlayerNote);
+        transferButton?.onClick.AddListener(TransferItem);
+        shareButton?.onClick.AddListener(ShareItem);
+        returnButton?.onClick.AddListener(ReturnItem);
     }
 
     // =========================================================================
@@ -151,6 +171,7 @@ public class ItemCardUI : MonoBehaviour
         PopulatePropertiesSection();
         PopulateNotesSection();
         PopulateOwnershipSection();
+        DisplayOwnershipInfo();
 
         // Expand
         SetViewState(true, instant: !animateExpansion);
@@ -169,6 +190,10 @@ public class ItemCardUI : MonoBehaviour
         ClearPropertiesSection();
         ClearNotesSection();
         ClearOwnershipSection();
+
+        // Hide ownership display
+        if (ownershipSection != null)
+            ownershipSection.SetActive(false);
 
         // Restore original sibling index
         transform.SetSiblingIndex(originalSiblingIndex);
@@ -581,6 +606,102 @@ public class ItemCardUI : MonoBehaviour
             quantityInput.onValueChanged.RemoveAllListeners();
     }
 
+    /// Set ownership summary in collapsed view (for Group Inventory)
+    /// This shows ownership info without expanding the card
+    public void SetOwnershipInfo(string ownershipSummary, int available, int totalOwned)
+    {
+        // You could add new UI elements to show this in collapsed view
+        // For now, this ensures the method exists for GroupInventoryPage
+
+        // Optional: Update a text field in collapsed view
+        // if (collapsedOwnershipText != null)
+        //     collapsedOwnershipText.text = ownershipSummary;
+
+        Debug.Log($"[ItemCardUI] Ownership: {ownershipSummary}, Available: {available}, Claimed: {totalOwned}");
+    }
+
+    /// <summary>
+    /// Display who owns what quantities of this group item
+    /// Shows: Steve: 4, Bella: 3, Unclaimed: 3
+    /// </summary>
+    private void DisplayOwnershipInfo()
+    {
+        if (ownershipSection == null || currentItem == null) return;
+
+        // Only show for group items
+        if (cardMode != CardMode.Group)
+        {
+            ownershipSection.SetActive(false);
+            return;
+        }
+
+        var inventoryManager = InventoryManager.Instance;
+        if (inventoryManager == null)
+        {
+            ownershipSection.SetActive(false);
+            return;
+        }
+
+        // Get ownership data
+        var ownerships = inventoryManager.GetAllOwnerships()
+            .Where(o => o.itemId == currentItem.itemId)
+            .ToList();
+
+        int totalQuantity = currentItem.quantity;
+        int totalOwned = ownerships.Sum(o => o.quantityOwned);
+        int unclaimed = totalQuantity - totalOwned;
+
+        // Clear existing rows
+        if (ownershipListContainer != null)
+        {
+            foreach (Transform child in ownershipListContainer)
+                Destroy(child.gameObject);
+        }
+
+        // Create row for each owner
+        var characterManager = CharacterManager.Instance;
+        foreach (var ownership in ownerships)
+        {
+            if (ownershipRowPrefab != null && ownershipListContainer != null)
+            {
+                var row = Instantiate(ownershipRowPrefab, ownershipListContainer);
+
+                var character = characterManager?.GetCharacterById(ownership.characterId);
+                string characterName = character?.characterName ?? "Unknown";
+
+                // Assuming the prefab has two TextMeshPro components: name and quantity
+                var texts = row.GetComponentsInChildren<TextMeshProUGUI>();
+                if (texts.Length >= 2)
+                {
+                    texts[0].text = characterName;
+                    texts[1].text = $"×{ownership.quantityOwned}";
+                }
+                else if (texts.Length == 1)
+                {
+                    texts[0].text = $"{characterName}: ×{ownership.quantityOwned}";
+                }
+            }
+        }
+
+        // Show unclaimed
+        if (unclaimedQuantityText != null)
+        {
+            unclaimedQuantityText.text = unclaimed > 0
+                ? $"Unclaimed: ×{unclaimed}"
+                : "All items claimed";
+            unclaimedQuantityText.color = unclaimed > 0 ? Color.white : Color.gray;
+        }
+
+        ownershipSection.SetActive(true);
+    }
+
+    public void HideOwnershipInfo()
+    {
+        // In Personal Inventory mode, hide ownership section
+        if (ownershipSection != null)
+            ownershipSection.SetActive(false);
+    }
+
     // =========================================================================
     // OWNERSHIP EVENT HANDLERS
     // =========================================================================
@@ -990,16 +1111,39 @@ public class ItemCardUI : MonoBehaviour
         Debug.Log($"[ItemCard] {currentPlayer} claimed {currentItem.itemName}");
     }
 
+
+    private void TransferItem()
+    {
+        if (currentItem == null) return;
+        Debug.Log($"[ItemCard] TRANSFER (permanent) requested for {currentItem.itemName}");
+        OnTransferRequested?.Invoke(currentItem);
+        UpdateDisplay();
+    }
+
     private void ShareItem()
     {
         if (currentItem == null) return;
 
-        currentItem.currentOwner = "";
+        // Open dialog to select quantity to claim
+        Debug.Log($"[ItemCard] SHARE (claim) requested for {currentItem.itemName}");
 
+        // For now, just claim 1. Later you can add a quantity dialog
+        int quantityToClaim = 1;
+        OnShareRequested?.Invoke(currentItem, quantityToClaim);
         UpdateDisplay();
-        OnItemModified?.Invoke(currentItem);
+    }
 
-        Debug.Log($"[ItemCard] Shared {currentItem.itemName} with party");
+    private void ReturnItem()
+    {
+        if (currentItem == null) return;
+
+        // Open dialog to select quantity to return
+        Debug.Log($"[ItemCard] RETURN (unclaim) requested for {currentItem.itemName}");
+
+        // For now, just return 1. Later you can add a quantity dialog
+        int quantityToReturn = 1;
+        OnReturnRequested?.Invoke(currentItem, quantityToReturn);
+        UpdateDisplay();
     }
 
     private void AddPlayerNote()
@@ -1030,15 +1174,58 @@ public class ItemCardUI : MonoBehaviour
             case CardMode.Personal:
                 claimButton?.gameObject.SetActive(false);
                 shareButton?.gameObject.SetActive(false);
+                returnButton?.gameObject.SetActive(false);
                 increaseQuantityButton?.gameObject.SetActive(true);
                 decreaseQuantityButton?.gameObject.SetActive(true);
                 deleteItemButton?.gameObject.SetActive(true);
+                if (transferButton != null)
+                {
+                    var characterManager = CharacterManager.Instance;
+                    var character = characterManager?.GetCharacterById(currentItem?.currentOwner);
+                    bool inGroup = !string.IsNullOrEmpty(character?.groupId);
+                    transferButton.gameObject.SetActive(inGroup); // Only show if in group
+
+                    // Update button text
+                    var buttonText = transferButton.GetComponentInChildren<TextMeshProUGUI>();
+                    if (buttonText) buttonText.text = "Transfer to Group";
+                }
                 break;
 
             case CardMode.Group:
-                bool isOwned = !string.IsNullOrEmpty(currentItem?.currentOwner);
-                claimButton?.gameObject.SetActive(!isOwned);
-                shareButton?.gameObject.SetActive(isOwned);
+                // Group items: can claim (share), return, or transfer to personal
+                var characterManager = CharacterManager.Instance;
+                string currentCharacterId = PlayerPrefs.GetString("SelectedCharacterId", "");
+
+                // Check if current character owns any of this item
+                var inventoryManager = InventoryManager.Instance;
+                var ownership = inventoryManager?.GetAllOwnerships()
+                    .FirstOrDefault(o => o.itemId == currentItem?.itemId &&
+                                         o.characterId == currentCharacterId);
+
+                int ownedQuantity = ownership?.quantityOwned ?? 0;
+                bool ownsAny = ownedQuantity > 0;
+
+                // Get unclaimed amount
+                int unclaimed = inventoryManager?.GetUnallocatedQuantity(currentItem?.itemId ?? "") ?? 0;
+                bool hasUnclaimed = unclaimed > 0;
+
+                // Share button: visible if there's unclaimed quantity
+                shareButton?.gameObject.SetActive(hasUnclaimed);
+
+                // Return button: visible if character owns some
+                returnButton?.gameObject.SetActive(ownsAny);
+
+                // Transfer button: visible if character owns some (transfer to personal)
+                if (transferButton != null)
+                {
+                    transferButton.gameObject.SetActive(ownsAny);
+                    var buttonText = transferButton.GetComponentInChildren<TextMeshProUGUI>();
+                    if (buttonText) buttonText.text = "Transfer to Personal";
+                }
+
+                // Old claim button - can be hidden now that we have share
+                claimButton?.gameObject.SetActive(false);
+
                 increaseQuantityButton?.gameObject.SetActive(true);
                 decreaseQuantityButton?.gameObject.SetActive(true);
                 deleteItemButton?.gameObject.SetActive(true);
@@ -1047,6 +1234,8 @@ public class ItemCardUI : MonoBehaviour
             case CardMode.ReadOnly:
                 claimButton?.gameObject.SetActive(false);
                 shareButton?.gameObject.SetActive(false);
+                transferButton?.gameObject.SetActive(false);
+                returnButton?.gameObject.SetActive(false);
                 increaseQuantityButton?.gameObject.SetActive(false);
                 decreaseQuantityButton?.gameObject.SetActive(false);
                 deleteItemButton?.gameObject.SetActive(false);
@@ -1069,6 +1258,8 @@ public class ItemCardUI : MonoBehaviour
         deleteItemButton?.onClick.RemoveAllListeners();
         claimButton?.onClick.RemoveAllListeners();
         shareButton?.onClick.RemoveAllListeners();
+        returnButton?.onClick.RemoveAllListeners();
+        transferButton?.onClick.RemoveAllListeners();
         addNoteButton?.onClick.RemoveAllListeners();
         assignOwnershipButton?.onClick.RemoveAllListeners();
     }

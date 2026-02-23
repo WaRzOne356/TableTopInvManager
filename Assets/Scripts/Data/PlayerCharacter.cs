@@ -12,6 +12,7 @@ public class PlayerCharacter
     public string characterId;
     public string characterName;
     public string ownerUserId;      // Which user owns this character
+    public string groupId;
     public string characterClass;   // Fighter, Wizard, etc.
     public int level;
 
@@ -31,6 +32,7 @@ public class PlayerCharacter
         lastPlayed = DateTime.Now;
         isActive = false;
         avatarSpriteName = "Avatar_Default";
+        groupId = null;
     }
 
     public PlayerCharacter(string name, string userId)
@@ -42,6 +44,7 @@ public class PlayerCharacter
         lastPlayed = DateTime.Now;
         isActive = false;
         avatarSpriteName = "Avatar_Default";
+        groupId = null;
     }
 }
 
@@ -54,6 +57,7 @@ public class SerializablePlayerCharacter
     public string characterId;
     public string characterName;
     public string ownerUserId;
+    public string groupId;
     public string characterClass;
     public int level;
     public string avatarSpriteName;
@@ -69,6 +73,7 @@ public class SerializablePlayerCharacter
             characterId = character.characterId,
             characterName  = character.characterName,
             ownerUserId = character.ownerUserId,
+            groupId = character.groupId,
             characterClass = character.characterClass,
             level = character.level,
             avatarSpriteName = character.avatarSpriteName,
@@ -86,6 +91,7 @@ public class SerializablePlayerCharacter
             characterId = characterId,
             characterName = characterName,
             ownerUserId = ownerUserId,
+            groupId = groupId,
             characterClass = characterClass ?? "",
             level = level,
             avatarSpriteName = avatarSpriteName ?? "Avatar_Default",

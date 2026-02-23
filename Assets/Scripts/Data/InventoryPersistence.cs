@@ -9,10 +9,17 @@ namespace InventorySystem.Data
     [System.Serializable]
     public class InventoryPersistenceData
     {
+        //group info
         public string groupId;
         public string groupName;
+        public string groupDescription;
+        public string creatorUserId;
+
+        //metadata
         public string lastSaved;
         public int version;
+        
+        //Data
         public List<SerializableInventoryItem> items;
         public List<SerializableUserInfo> users;
         public List<SerializablePlayerCharacter> characters;
@@ -96,6 +103,33 @@ namespace InventorySystem.Data
                 thumbnailUrl = item.thumbnailUrl,
                 lastModified = item.lastModified.ToString("O")
             };
+        }
+
+        public InventoryItem ToInventoryItem()
+        {
+            DateTime parsedDate = DateTime.TryParse(lastModified, out parsedDate) ? parsedDate : DateTime.Now;
+
+            var item = new InventoryItem(itemName, category)
+            {
+                itemId = itemId ?? Guid.NewGuid().ToString(),
+                description = description ?? "",
+                quantity = quantity,
+                weight = weight,
+                valueInGold = valueInGold,
+                currentOwner = currentOwner ?? "",
+                thumbnailUrl = thumbnailUrl ?? "",
+                dateAdded = parsedDate,
+                lastModified = parsedDate
+            };
+
+            // Initialize properties if null
+            if (item.properties == null)
+                item.properties = new Dictionary<string, string>();
+
+            if (item.playerNotes == null)
+                item.playerNotes = new List<PlayerNote>();
+
+            return item;
         }
     }
 

@@ -62,7 +62,6 @@
   </ItemGroup>
   <ItemGroup>
     <Compile Include="Assets\Scripts\UI\InventoryUIManager.cs" />
-    <Compile Include="Assets\Scripts\UI\Dialogs\AddMemberToGroup.cs" />
     <Compile Include="Assets\Scripts\UI\Pages\UIPage.cs" />
     <Compile Include="Assets\Scripts\UI\Dialogs\EditGroupDialog.cs" />
     <Compile Include="Assets\Scripts\UI\Pages\GroupInventoryPage.cs" />
@@ -81,6 +80,7 @@
     <Compile Include="Assets\Scripts\UI\Navigation\SidebarNavigation.cs" />
     <Compile Include="Assets\Scripts\UI\ItemCardUI.cs" />
     <Compile Include="Assets\Scripts\Data\Group.cs" />
+    <Compile Include="Assets\Scripts\UI\Dialogs\ClaimItemDialog.cs" />
     <Compile Include="Assets\Scripts\UI\CreateUserDialog.cs" />
     <Compile Include="Assets\Scripts\UI\NoteRowUI.cs" />
     <Compile Include="Assets\Scripts\Network\NetworkInventoryData.cs" />
@@ -88,10 +88,12 @@
     <Compile Include="Assets\Scripts\Data\JSONInventoryStorage.cs" />
     <Compile Include="Assets\Scripts\UI\Dialogs\AddItemDialog.cs" />
     <Compile Include="Assets\Scripts\Data\UserManager.cs" />
+    <Compile Include="Assets\Scripts\Data\PersonalStorageMaanger.cs" />
     <Compile Include="Assets\Scripts\UI\ViewMode.cs" />
     <Compile Include="Assets\Scripts\InventoryTester.cs" />
     <Compile Include="Assets\Scripts\Network\Do not use -NetworkInventoryManager.cs" />
     <Compile Include="Assets\TutorialInfo\Scripts\Readme.cs" />
+    <Compile Include="Assets\Scripts\UI\Dialogs\LeaveGroupDialog.cs" />
     <Compile Include="Assets\Scripts\UI\Dialogs\CreateCharacterDialog.cs" />
     <Compile Include="Assets\Scripts\Data\InventoryPersistence.cs" />
     <Compile Include="Assets\Scripts\UI\Navigation\SidebarMenuItemUI.cs" />
@@ -100,6 +102,7 @@
     <Compile Include="Assets\Scripts\Data\ItemOwnership.cs" />
     <Compile Include="Assets\Scripts\UI\CharacterCardUI.cs" />
     <Compile Include="Assets\Scripts\UI\UserSwitcherDropDown.cs" />
+    <Compile Include="Assets\Scripts\UI\Dialogs\AddMemberToGroupDialog.cs" />
     <Compile Include="Assets\Scripts\Data\IInventoryStorage.cs" />
     <Compile Include="Assets\Scripts\UI\PropertyRowUI.cs" />
     <Compile Include="Assets\Scripts\UI\SearchResultUI.cs" />
@@ -107,6 +110,7 @@
     <Compile Include="Assets\Scripts\UI\Dialogs\AddCharacterToGroupDialog.cs" />
     <Compile Include="Assets\Scripts\HTTP\ItemDataFetcher.cs" />
     <Compile Include="Assets\Scripts\Data\ApiModels.cs" />
+    <Compile Include="Assets\Scripts\UI\Dialogs\TransferItemDialog.cs" />
   </ItemGroup>
   <ItemGroup>
     <None Include="Assets\TextMesh Pro\Shaders\TMPro.cginc" />

@@ -3,115 +3,120 @@ using UnityEngine.UI;
 using TMPro;
 using System;
 
-/// <summary>
-/// Dialog for editing group details
-/// </summary>
-public class EditGroupDialog : MonoBehaviour
+
+namespace InventorySystem.UI.Dialogs
 {
-    [Header("UI Elements")]
-    [SerializeField] private TMP_InputField groupNameInput;
-    [SerializeField] private TMP_InputField descriptionInput;
-    [SerializeField] private Button saveButton;
-    [SerializeField] private Button cancelButton;
-    [SerializeField] private Button changeAvatarButton;
-    [SerializeField] private TextMeshProUGUI errorText;
 
-    public Action<Group> OnGroupUpdated;
-
-    private Group currentGroup;
-
-    private void Awake()
+    /// <summary>
+    /// Dialog for editing group details
+    /// </summary>
+    public class EditGroupDialog : MonoBehaviour
     {
-        saveButton?.onClick.AddListener(OnSaveClicked);
-        cancelButton?.onClick.AddListener(CloseDialog);
-        changeAvatarButton?.onClick.AddListener(OnChangeAvatarClicked);
+        [Header("UI Elements")]
+        [SerializeField] private TMP_InputField groupNameInput;
+        [SerializeField] private TMP_InputField descriptionInput;
+        [SerializeField] private Button saveButton;
+        [SerializeField] private Button cancelButton;
+        [SerializeField] private Button changeAvatarButton;
+        [SerializeField] private TextMeshProUGUI errorText;
 
-        if (errorText != null)
-            errorText.gameObject.SetActive(false);
+        public Action<Group> OnGroupUpdated;
 
-        gameObject.SetActive(false);
-    }
+        private Group currentGroup;
 
-    public void ShowDialog(Group group)
-    {
-        currentGroup = group;
-
-        // Populate inputs
-        if (groupNameInput != null)
-            groupNameInput.text = group.groupName;
-        if (descriptionInput != null)
-            descriptionInput.text = group.description;
-
-        if (errorText != null)
-            errorText.gameObject.SetActive(false);
-
-        gameObject.SetActive(true);
-    }
-
-    private void OnSaveClicked()
-    {
-        if (currentGroup == null) return;
-
-        string newName = groupNameInput?.text ?? "";
-        string newDescription = descriptionInput?.text ?? "";
-
-        if (!ValidateInput(newName, out string error))
+        private void Awake()
         {
-            ShowError(error);
-            return;
+            saveButton?.onClick.AddListener(OnSaveClicked);
+            cancelButton?.onClick.AddListener(CloseDialog);
+            changeAvatarButton?.onClick.AddListener(OnChangeAvatarClicked);
+
+            if (errorText != null)
+                errorText.gameObject.SetActive(false);
+
+            gameObject.SetActive(false);
         }
 
-        // Update group
-        currentGroup.groupName = newName;
-        currentGroup.description = newDescription;
-        currentGroup.lastActivity = DateTime.Now;
-
-        OnGroupUpdated?.Invoke(currentGroup);
-        CloseDialog();
-    }
-
-    private void OnChangeAvatarClicked()
-    {
-        // TODO: Open avatar selection dialog for groups
-        ShowError("Avatar selection coming soon!");
-    }
-
-    private bool ValidateInput(string groupName, out string error)
-    {
-        error = "";
-
-        if (string.IsNullOrWhiteSpace(groupName))
+        public void ShowDialog(Group group)
         {
-            error = "Group name cannot be empty";
-            return false;
+            currentGroup = group;
+
+            // Populate inputs
+            if (groupNameInput != null)
+                groupNameInput.text = group.groupName;
+            if (descriptionInput != null)
+                descriptionInput.text = group.description;
+
+            if (errorText != null)
+                errorText.gameObject.SetActive(false);
+
+            gameObject.SetActive(true);
         }
 
-        if (groupName.Length < 3)
+        private void OnSaveClicked()
         {
-            error = "Group name must be at least 3 characters";
-            return false;
+            if (currentGroup == null) return;
+
+            string newName = groupNameInput?.text ?? "";
+            string newDescription = descriptionInput?.text ?? "";
+
+            if (!ValidateInput(newName, out string error))
+            {
+                ShowError(error);
+                return;
+            }
+
+            // Update group
+            currentGroup.groupName = newName;
+            currentGroup.description = newDescription;
+            currentGroup.lastActivity = DateTime.Now;
+
+            OnGroupUpdated?.Invoke(currentGroup);
+            CloseDialog();
         }
 
-        if (groupName.Length > 50)
+        private void OnChangeAvatarClicked()
         {
-            error = "Group name must be less than 50 characters";
-            return false;
+            // TODO: Open avatar selection dialog for groups
+            ShowError("Avatar selection coming soon!");
         }
 
-        return true;
-    }
-
-    private void ShowError(string message)
-    {
-        if (errorText != null)
+        private bool ValidateInput(string groupName, out string error)
         {
-            errorText.text = message;
-            errorText.gameObject.SetActive(true);
-        }
-    }
+            error = "";
 
-    private void CloseDialog()
-    {
-        gameObject.SetActive(false);
+            if (string.IsNullOrWhiteSpace(groupName))
+            {
+                error = "Group name cannot be empty";
+                return false;
+            }
+
+            if (groupName.Length < 3)
+            {
+                error = "Group name must be at least 3 characters";
+                return false;
+            }
+
+            if (groupName.Length > 50)
+            {
+                error = "Group name must be less than 50 characters";
+                return false;
+            }
+
+            return true;
+        }
+
+        private void ShowError(string message)
+        {
+            if (errorText != null)
+            {
+                errorText.text = message;
+                errorText.gameObject.SetActive(true);
+            }
+        }
+
+        private void CloseDialog()
+        {
+            gameObject.SetActive(false);
+        }
     }
 }

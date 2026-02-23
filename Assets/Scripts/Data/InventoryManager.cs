@@ -43,11 +43,12 @@ public class InventoryManager : MonoBehaviour
     private List<InventoryItem> localInventoryCache = new List<InventoryItem>();
     private Dictionary<string, InventoryItem> itemLookup = new Dictionary<string, InventoryItem>();
     private List<ItemOwnership> cachedOwnerships = new List<ItemOwnership>();
+    private GroupInventory currentGroupInventory;
 
 
 
     private float lastAutoSaveTime;
-    private string currentGroupId = "group_default";
+    private string currentGroupId;
     private string currentGroupName = "Party Inventory";
     private int version = 0;
 
@@ -79,6 +80,9 @@ public class InventoryManager : MonoBehaviour
 
     private async void Start()
     {
+        // Get current group ID from GroupManager
+        UpdateCurrentGroupId();
+
         await InitializeAsync();
     }
 
@@ -102,6 +106,12 @@ public class InventoryManager : MonoBehaviour
                 {
                     RestoreFromPersistenceData(data);
                     Log($"Loaded {localInventoryCache.Count} items from local storage.");
+
+                    if( data.itemOwnerships != null && data.itemOwnerships.Count >0)
+                    {
+                        cachedOwnerships = data.itemOwnerships.Select(so => so.ToOwnership()).ToList();
+                        Log($"Loaded {cachedOwnerships.Count} owndership records");
+                    }
                 }
                 else
                 {
@@ -129,17 +139,46 @@ public class InventoryManager : MonoBehaviour
             }
         }
 
-        cachedOwnerships = await LoadOwnershipAsync();
+        if (cachedOwnerships.Count == 0)
+        {
+            cachedOwnerships = await LoadOwnershipAsync();
+        }
 
         // notify UI
         OnInventoryChanged?.Invoke(GetCurrentInventory());
     }
 
+    private void UpdateCurrentGroupId()
+    {
+        var groupManager = GroupManager.Instance;
+        if (groupManager != null)
+        {
+            var currentGroup = groupManager.GetCurrentGroup();
+            if (currentGroup != null)
+            {
+                currentGroupId = currentGroup.groupId;
+                currentGroupName = currentGroup.groupName;
+                Debug.Log($"[InventoryManager] Using group: {currentGroupName} ({currentGroupId})");
+            }
+            else
+            {
+                currentGroupId = "group_default";
+                Debug.LogWarning("[InventoryManager] No current group, using default");
+            }
+        }
+    }
+
     #region Public API (async)
 
+    /// <summary>
+    /// Get the full list of items in the current group inventory
+    /// </summary>
     public List<InventoryItem> GetCurrentInventory()
     {
-        return new List<InventoryItem>(localInventoryCache);
+        if (currentGroupInventory == null)
+            return new List<InventoryItem>();
+
+        return currentGroupInventory.items ?? new List<InventoryItem>();
     }
 
     public async Task AddItemAsync(InventoryItem item)
@@ -194,7 +233,7 @@ public class InventoryManager : MonoBehaviour
 
         OnInventoryChanged?.Invoke(GetCurrentInventory());
     }
-
+    /*
     public async Task UpdateItemQuantityAsync(string itemId, int newQuantity)
     {
         if (!itemLookup.ContainsKey(itemId)) return;
@@ -234,6 +273,49 @@ public class InventoryManager : MonoBehaviour
 
         OnInventoryChanged?.Invoke(GetCurrentInventory());
     }
+    */
+
+    /// <summary>
+    /// Update item quantity in group inventory
+    /// Used when items are added or removed from total pool
+    /// </summary>
+    public async Task UpdateItemQuantityAsync(string itemId, int newQuantity)
+    {
+        if (currentGroupInventory == null)
+        {
+            Debug.LogWarning("[InventoryManager] No current group inventory");
+            return;
+        }
+
+        var item = currentGroupInventory.items.FirstOrDefault(i => i.itemId == itemId);
+        if (item == null)
+        {
+            Debug.LogWarning($"[InventoryManager] Item {itemId} not found in group");
+            return;
+        }
+
+        if (newQuantity <= 0)
+        {
+            // Remove item entirely
+            currentGroupInventory.items.Remove(item);
+
+            // Also remove all ownership records for this item
+            currentGroupInventory.itemOwnerships.RemoveAll(o => o.itemId == itemId);
+
+            Debug.Log($"[InventoryManager] Removed item {itemId} from group (quantity 0)");
+        }
+        else
+        {
+            item.quantity = newQuantity;
+            Debug.Log($"[InventoryManager] Updated item {itemId} quantity to {newQuantity}");
+        }
+
+        currentGroupInventory.lastModified = DateTime.Now;
+        currentGroupInventory.version++;
+
+        await SaveInventoryAsync();
+        OnInventoryChanged?.Invoke(currentGroupInventory.items);
+    }
 
     public async Task RemoveItemAsync(string itemId)
     {
@@ -269,6 +351,20 @@ public class InventoryManager : MonoBehaviour
         }
     }
 
+    private async Task SaveInventoryAsync()
+    {
+        if (currentGroupInventory == null || storage == null) return;
+        await storage.SaveAsync(new InventoryPersistenceData
+        {
+            groupId = currentGroupId,
+            groupName = currentGroupName,
+            version = currentGroupInventory.version,
+            lastSaved = DateTime.Now.ToString("O"),
+            items = currentGroupInventory.items.Select(i => SerializableInventoryItem.FromInventoryItem(i)).ToList(),
+            itemOwnerships = currentGroupInventory.itemOwnerships.Select(o => SerializableItemOwnership.FromOwnership(o)).ToList()
+        });
+    }
+
     public async Task ForceSaveAsync()
     {
         if (apiMode)
@@ -292,6 +388,10 @@ public class InventoryManager : MonoBehaviour
             data.itemOwnerships = ownerships
                 .Select(SerializableItemOwnership.FromOwnership)
                 .ToList();
+
+            //Update the groupid and timestamp
+            data.groupId = currentGroupId;
+            data.lastSaved = DateTime.Now.ToString("0");               
 
             await storage.SaveAsync(data);
 
@@ -336,43 +436,155 @@ public class InventoryManager : MonoBehaviour
         return cachedOwnerships.FindAll(o => o.itemId == itemId);
     }
 
+    /// <summary>
+    /// Get all ownership records for current group
+    /// </summary>
     public List<ItemOwnership> GetAllOwnerships()
     {
-        return new List<ItemOwnership>(cachedOwnerships);
+        if (currentGroupInventory == null)
+            return new List<ItemOwnership>();
+
+        return currentGroupInventory.itemOwnerships ?? new List<ItemOwnership>();
     }
 
-    public async Task UpdateOwnershipAsync(string itemId, string characterId, int newQuantity)
-    {
-        var ownership = cachedOwnerships.Find(o =>
-            o.itemId == itemId && o.characterId == characterId);
 
-        if (newQuantity <= 0)
+    /// <summary>
+    /// Get ownership records for a specific character
+    /// </summary>
+    public List<ItemOwnership> GetCharacterOwnerships(string characterId)
+    {
+        if (currentGroupInventory == null)
+            return new List<ItemOwnership>();
+
+        return currentGroupInventory.itemOwnerships
+            .Where(o => o.characterId == characterId)
+            .ToList();
+    }
+
+    /// <summary>
+    /// Get how much of an item a character owns
+    /// </summary>
+    public int GetCharacterOwnership(string itemId, string characterId)
+    {
+        if (currentGroupInventory == null) return 0;
+
+        var ownership = currentGroupInventory.itemOwnerships
+            .FirstOrDefault(o => o.itemId == itemId && o.characterId == characterId);
+
+        return ownership?.quantityOwned ?? 0;
+    }
+
+    /// <summary>
+    /// Check if an item exists in group inventory
+    /// </summary>
+    public bool ItemExistsInGroup(string itemId)
+    {
+        if (currentGroupInventory == null) return false;
+        return currentGroupInventory.items.Any(i => i.itemId == itemId);
+    }
+    public int GetUnallocatedQuantity(string itemId)
+{
+    if (currentGroupInventory == null) return 0;
+    return currentGroupInventory.GetUnallocatedQuantity(itemId);
+}
+
+    /// <summary>
+    /// Return items from a character back to group storage (unclaimed)
+    /// Used when a character returns shared items or transfers to personal
+    /// </summary>
+    public async Task ReturnOwnershipAsync(string itemId, string characterId, int quantity)
+    {
+        if (currentGroupInventory == null)
         {
-            // Remove ownership if quantity is 0 or less
-            if (ownership != null)
-            {
-                cachedOwnerships.Remove(ownership);
-            }
+            Debug.LogWarning("[InventoryManager] No current group inventory");
+            return;
+        }
+
+        // Use the existing ReturnItem method from GroupInventory
+        bool success = currentGroupInventory.ReturnItem(itemId, characterId, quantity);
+
+        if (success)
+        {
+            await SaveInventoryAsync();
+            OnInventoryChanged?.Invoke(currentGroupInventory.items);
+
+            Debug.Log($"[InventoryManager] Character {characterId} returned {quantity}x item {itemId} to pool");
         }
         else
         {
-            if (ownership != null)
+            Debug.LogWarning($"[InventoryManager] Failed to return {quantity}x item {itemId}");
+            throw new InvalidOperationException($"Cannot return {quantity} of item - insufficient ownership");
+        }
+    }
+
+
+    /// <summary>
+    /// Update ownership quantity for a character
+    /// If newQuantity is 0, removes the ownership record
+    /// If character doesn't own it yet, creates new ownership
+    /// </summary>
+    public async Task UpdateOwnershipAsync(string itemId, string characterId, int quantityChange)
+    {
+        if (currentGroupInventory == null)
+        {
+            Debug.LogWarning("[InventoryManager] No current group inventory");
+            return;
+        }
+
+        // Find existing ownership
+        var ownership = currentGroupInventory.itemOwnerships
+            .FirstOrDefault(o => o.itemId == itemId && o.characterId == characterId);
+
+        if (ownership != null)
+        {
+            // Update existing
+            int newQuantity = ownership.quantityOwned + quantityChange;
+
+            if (newQuantity <= 0)
             {
-                // Update existing
-                ownership.quantityOwned = newQuantity;
+                // Remove ownership
+                currentGroupInventory.itemOwnerships.Remove(ownership);
+                Debug.Log($"[InventoryManager] Removed ownership of {itemId} from character {characterId}");
             }
             else
             {
-                // Create new
-                cachedOwnerships.Add(new ItemOwnership(itemId, characterId, newQuantity));
+                ownership.quantityOwned = newQuantity;
+                Debug.Log($"[InventoryManager] Updated ownership of {itemId} to {newQuantity} for character {characterId}");
             }
         }
+        else if (quantityChange > 0)
+        {
+            // Create new ownership
+            currentGroupInventory.itemOwnerships.Add(
+                new ItemOwnership(itemId, characterId, quantityChange)
+            );
+            Debug.Log($"[InventoryManager] Created new ownership of {itemId} ({quantityChange}) for character {characterId}");
+        }
+        else
+        {
+            Debug.LogWarning($"[InventoryManager] Cannot create negative ownership for {itemId}");
+            return;
+        }
 
-        // Save to storage
-        await SaveOwnershipAsync(cachedOwnerships);
+        currentGroupInventory.lastModified = DateTime.Now;
+        currentGroupInventory.version++;
 
-        if (logging)
-            Debug.Log($"[InventoryManager] Updated ownership: Item={itemId}, Character={characterId}, Qty={newQuantity}");
+        await SaveInventoryAsync();
+        OnInventoryChanged?.Invoke(currentGroupInventory.items);
+    }
+
+
+    /// <summary>
+    /// Check if a character owns enough of an item
+    /// </summary>
+    public bool CharacterOwnsQuantity(string itemId, string characterId, int quantity)
+    {
+        if (currentGroupInventory == null) return false;
+
+        var ownership = currentGroupInventory.itemOwnerships
+            .FirstOrDefault(o => o.itemId == itemId && o.characterId == characterId);
+
+        return ownership != null && ownership.quantityOwned >= quantity;
     }
 
     #endregion
