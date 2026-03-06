@@ -38,7 +38,7 @@ namespace InventorySystem.UI.Dialogs
 
         [Header("Colors")]
         [SerializeField] private Color personalColor = new Color(0.3f, 0.6f, 1f);
-        [SerializeField] private Color groupColor = new Color(1f, 0.6f, 0.3f);
+        [SerializeField] private Color groupColor = new Color(1f, 0.6f, 0.2f);
 
         // Events
         public Action<TransferRequest> OnTransferConfirmed;
