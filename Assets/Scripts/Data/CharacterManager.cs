@@ -15,9 +15,8 @@ public class CharacterManager : MonoBehaviour
     [SerializeField] private bool enablePersistence = true;
     [SerializeField] private InventoryManager.StorageType storageType = InventoryManager.StorageType.JSON;
     [SerializeField] private bool logging = true;
-
-    [Header("Group/Storage Id")]
-    [SerializeField] private string currentGroupId = "group_default";
+ 
+    private string currentGroupId;
 
     private List<PlayerCharacter> characters = new List<PlayerCharacter>();
     private IInventoryStorage storage;
@@ -45,6 +44,9 @@ public class CharacterManager : MonoBehaviour
 
     private async void Start()
     {
+        // Get current group ID from GroupManager
+        UpdateCurrentGroupId();
+
         await LoadCharactersAsync();
     }
 
@@ -73,6 +75,12 @@ public class CharacterManager : MonoBehaviour
     public async Task AddCharacterAsync(PlayerCharacter character)
     {
         if (character == null) return;
+
+        if (string.IsNullOrEmpty(character.ownerUserId))
+        {
+            Debug.LogError($"[CharacterManager] Character {character.characterName} has no ownerUserId");
+            return;
+        }
 
         characters.RemoveAll(c => c.characterId == character.characterId); // Replace if exists
         characters.Add(character);
@@ -178,6 +186,25 @@ public class CharacterManager : MonoBehaviour
         catch (Exception e)
         {
             Debug.LogError($"[CharacterManager] SaveCharactersAsync failed: {e.Message}");
+        }
+    }
+
+    private void UpdateCurrentGroupId()
+    {
+        var groupManager = GroupManager.Instance;
+        if (groupManager != null)
+        {
+            var currentGroup = groupManager.GetCurrentGroup();
+            if (currentGroup != null)
+            {
+                currentGroupId = currentGroup.groupId;
+                Debug.Log($"[CharacterManager] Using group: {currentGroupId}");
+            }
+            else
+            {
+                currentGroupId = "group_default";
+                Debug.LogWarning("[CharacterManager] No current group, using default");
+            }
         }
     }
 

@@ -97,3 +97,7 @@ InitTestScene*.unity*
 
 # Auto-generated scenes by play mode tests
 /[Aa]ssets/[Ii]nit[Tt]est[Ss]cene*.unity*
+/Assets/unityscripts2.zip.meta
+/Assets/unityscripts2.zip
+/Assets/UnityScripts.zip.meta
+/Assets/UnityScripts.zip

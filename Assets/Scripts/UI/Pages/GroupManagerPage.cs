@@ -5,7 +5,7 @@ using UnityEngine;
 using UnityEngine.UI;
 using TMPro;
 using InventorySystem.UI.Navigation;
-using InventorySystem.UI.Pages;
+using InventorySystem.UI.Dialogs;
 using InventorySystem.Data;
 
 namespace InventorySystem.UI.Pages
@@ -117,6 +117,7 @@ namespace InventorySystem.UI.Pages
             Debug.Log($"  switchGroupButton: {switchGroupButton != null}");
             Debug.Log($"  addMemberButton: {addMemberButton != null}");
             Debug.Log($"  addCharacterButton: {addCharacterButton != null}");
+            Debug.Log($"  createGroupButton: {createGroupButton != null}");
 
             // Current Group Actions
             editGroupButton?.onClick.AddListener(OpenEditGroupDialog);
@@ -131,6 +132,7 @@ namespace InventorySystem.UI.Pages
 
             // Admin Controls - ADD THIS
             createUserButton?.onClick.AddListener(OpenCreateUserDialog);
+            createGroupButton?.onClick.AddListener(OpenCreateGroupDialog);
         }
 
         protected override void RefreshContent()
@@ -657,12 +659,15 @@ namespace InventorySystem.UI.Pages
         {
             if (createGroupDialog != null)
             {
+                Debug.Log("[GroupManager] CreateGroupDialog is not null");
                 string currentUserId = PlayerPrefs.GetString("UserId", "");
+                Debug.Log($"[GroupManager] CreateGroupDialogs currentuserid: {currentUserId}");
                 createGroupDialog.ShowDialog(currentUserId);
                 createGroupDialog.OnGroupCreated += OnGroupCreated;
             }
             else
             {
+                Debug.Log("[GroupManager] CreateGroupDialog is null");
                 ShowMessage("Create group dialog not available", MessageType.Error);
             }
         }

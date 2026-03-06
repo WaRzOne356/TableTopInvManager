@@ -6,7 +6,7 @@ using UnityEngine;
 using UnityEngine.UI;
 using TMPro;
 using InventorySystem.UI.Navigation;
-using InventorySystem.UI.Pages;
+using InventorySystem.UI.Dialogs;
 using InventorySystem.Data;
 
 namespace InventorySystem.UI.Pages
@@ -94,7 +94,8 @@ namespace InventorySystem.UI.Pages
             var userManager = UserManager.Instance;
             if (userManager != null)
             {
-                currentUserInfo = userManager.GetUserByName(GetCurrentUserName());
+                var allUsers = userManager.GetUsers();
+                currentUserInfo = allUsers.FirstOrDefault(u => u.userId == currentUserId);
 
                 if (currentUserInfo != null)
                 {

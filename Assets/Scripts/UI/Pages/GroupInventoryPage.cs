@@ -1,14 +1,15 @@
-﻿using System.Collections.Generic;
+﻿using System;
+using System.Collections.Generic;
 using System.Linq;
 using UnityEngine;
 using UnityEngine.UI;
 using TMPro;
 using InventorySystem.UI.Navigation;
-using InventorySystem.UI.Pages;
+using InventorySystem.UI.Dialogs;
 using InventorySystem.Data;
 
 // ============================================================================
-// GROUP INVENTORY PAGE
+// GROUP INVENTORY PAGE - UPDATED FOR CHARACTER-BASED OWNERSHIP
 // ============================================================================
 namespace InventorySystem.UI.Pages
 {
@@ -17,16 +18,17 @@ namespace InventorySystem.UI.Pages
         [Header("Group Inventory Display")]
         [SerializeField] private Transform itemContainer;
         [SerializeField] private ScrollRect inventoryScrollView;
-        [SerializeField] private GameObject itemCardPrefab; // Should have ItemCardUI component
-
+        [SerializeField] private GameObject itemCardPrefab;
 
         [Header("Dialogs")]
         [SerializeField] private AddItemDialog addItemDialog;
+        [SerializeField] private ClaimItemDialog claimItemDialog;
 
         [Header("Group Controls")]
         [SerializeField] private TMP_InputField searchField;
         [SerializeField] private TMP_Dropdown categoryFilter;
-        [SerializeField] private TMP_Dropdown ownerFilter;
+        [SerializeField] private TMP_Dropdown characterFilter;
+        [SerializeField] private TMP_Dropdown availabilityFilter; // All, Available, Claimed
         [SerializeField] private Button addItemButton;
         [SerializeField] private Button sortButton;
 
@@ -34,23 +36,28 @@ namespace InventorySystem.UI.Pages
         [SerializeField] private TextMeshProUGUI totalItemsText;
         [SerializeField] private TextMeshProUGUI totalWeightText;
         [SerializeField] private TextMeshProUGUI totalValueText;
-        [SerializeField] private TextMeshProUGUI groupMembersText;
+        [SerializeField] private TextMeshProUGUI availableItemsText;
+        [SerializeField] private TextMeshProUGUI claimedItemsText;
+        [SerializeField] private TextMeshProUGUI groupMemberText;
 
         [Header("Group Management")]
-        [SerializeField] private Button manageUsersButton;
+        [SerializeField] private Button manageGroupButton;
         [SerializeField] private Button exportGroupInventoryButton;
-        [SerializeField] private Button shareInventoryLinkButton;
 
         [Header("Connection Status")]
         [SerializeField] private TextMeshProUGUI connectionStatusText;
         [SerializeField] private TextMeshProUGUI lastSyncText;
-        [SerializeField] private Button reconnectButton;
 
         // State
-        private List<InventoryItem> groupItems;
-        private List<GameObject> itemCardObjects;
+        private string currentUserId;
+        private string currentGroupId;
+        private List<InventoryItem> groupItems = new List<InventoryItem>();
+        private List<ItemOwnership> allOwnerships = new List<ItemOwnership>();
+        private List<PlayerCharacter> groupCharacters = new List<PlayerCharacter>();
+        private List<GameObject> itemCardObjects = new List<GameObject>();
         private InventoryManager inventoryManager;
-        private UserManager userManager;
+        private GroupManager groupManager;
+        private CharacterManager characterManager;
         private ItemCardUI currentlyExpandedCard;
 
         void Awake()
@@ -58,11 +65,31 @@ namespace InventorySystem.UI.Pages
             pageType = UIPageType.GroupInventory;
             pageTitle = "Group Inventory";
 
-            groupItems = new List<InventoryItem>();
-            itemCardObjects = new List<GameObject>();
-
             SetupEventHandlers();
             SetupAddItemDialog();
+        }
+
+        void Start()
+        {
+            inventoryManager = InventoryManager.Instance;
+            groupManager = GroupManager.Instance;
+            characterManager = CharacterManager.Instance;
+
+            if (inventoryManager != null)
+            {
+                inventoryManager.OnInventoryChanged += OnInventoryChanged;
+                inventoryManager.OnInventoryMessage += OnInventoryMessage;
+            }
+
+            if (groupManager != null)
+            {
+                groupManager.OnCurrentGroupChanged += OnCurrentGroupChanged;
+            }
+
+            if (characterManager != null)
+            {
+                characterManager.OnCharactersChanged += OnCharactersChanged;
+            }
         }
 
         private void SetupAddItemDialog()
@@ -72,39 +99,6 @@ namespace InventorySystem.UI.Pages
                 addItemDialog.OnItemCreated += OnCustomItemCreatedForGroup;
                 addItemDialog.OnItemSelected += OnItemSelectedFromSearch;
                 addItemDialog.OnDialogClosed += OnAddItemDialogClosed;
-
-                Debug.Log("[GroupInventory] Event handlers subscribed to AddItemDialog");
-            }
-            else
-            {
-                Debug.LogWarning("[GroupInventory] AddItemDialog reference not set!");
-            }
-        }
-
-        void Start()
-        {
-            inventoryManager = InventoryManager.Instance;
-            
-            if (inventoryManager != null)
-            {
-                Debug.Log($"[GroupInventory] InventoryManager found: {inventoryManager.gameObject.name}");
-                inventoryManager.OnInventoryChanged += OnNetworkInventoryChanged;
-                inventoryManager.OnInventoryMessage += OnNetworkMessage;
-                
-            }
-            else
-            {
-                Debug.LogError("[GroupInventory] InventoryManager.Instance is NULL!");
-                Debug.LogError("Make sure InventoryManager GameObject exists in scene and has NetworkBehaviour component!");
-            }
-            userManager = UserManager.Instance;
-            if (userManager != null)
-            {
-                userManager.OnUsersChanged += OnUsersChanged;
-            }
-            else
-            {
-                Debug.LogError("[GroupInventory] UserManager.Instance is NULL!");
             }
         }
 
@@ -112,21 +106,58 @@ namespace InventorySystem.UI.Pages
         {
             searchField?.onValueChanged.AddListener(OnSearchChanged);
             categoryFilter?.onValueChanged.AddListener(OnFilterChanged);
-            ownerFilter?.onValueChanged.AddListener(OnFilterChanged);
+            characterFilter?.onValueChanged.AddListener(OnFilterChanged);
+            availabilityFilter?.onValueChanged.AddListener(OnFilterChanged);
             addItemButton?.onClick.AddListener(OpenItemBrowser);
             sortButton?.onClick.AddListener(CycleSortMode);
-            manageUsersButton?.onClick.AddListener(OpenUserManagement);
+            manageGroupButton?.onClick.AddListener(OpenGroupManagement);
             exportGroupInventoryButton?.onClick.AddListener(ExportGroupInventory);
-            shareInventoryLinkButton?.onClick.AddListener(ShareInventoryLink);
-            reconnectButton?.onClick.AddListener(Reconnect);
         }
 
         protected override void RefreshContent()
         {
+            LoadCurrentUser();
+            LoadCurrentGroup();
             LoadGroupInventory();
+            LoadGroupCharacters();
+            LoadOwnership();
+            UpdateCharacterFilter();
             UpdateGroupStats();
             UpdateConnectionStatus();
             RefreshItemDisplay();
+        }
+
+        // =====================================================================
+        // DATA LOADING
+        // =====================================================================
+
+        private void LoadCurrentUser()
+        {
+            currentUserId = PlayerPrefs.GetString("UserId", "");
+
+            if (string.IsNullOrEmpty(currentUserId))
+            {
+                Debug.LogError("[GroupInventory] No userId found!");
+                currentUserId = Guid.NewGuid().ToString();
+                PlayerPrefs.SetString("UserId", currentUserId);
+                PlayerPrefs.Save();
+            }
+        }
+
+        private void LoadCurrentGroup()
+        {
+            if (groupManager == null) return;
+
+            var currentGroup = groupManager.GetCurrentGroup();
+            if (currentGroup != null)
+            {
+                currentGroupId = currentGroup.groupId;
+                Debug.Log($"[GroupInventory] Current group: {currentGroup.groupName}");
+            }
+            else
+            {
+                Debug.LogWarning("[GroupInventory] No current group!");
+            }
         }
 
         private void LoadGroupInventory()
@@ -135,15 +166,47 @@ namespace InventorySystem.UI.Pages
 
             if (inventoryManager != null)
             {
-                var inventory = inventoryManager.GetCurrentInventory();
-                if (inventory != null)
-                {
-                    groupItems.AddRange(inventory);
-                }
+                groupItems.AddRange(inventoryManager.GetCurrentInventory());
+                Debug.Log($"[GroupInventory] Loaded {groupItems.Count} group items");
             }
-
-            Debug.Log($"[GroupInventory] Loaded {groupItems.Count} group items");
         }
+
+        private void LoadGroupCharacters()
+        {
+            groupCharacters.Clear();
+
+            if (groupManager == null || string.IsNullOrEmpty(currentGroupId)) return;
+
+            groupCharacters = groupManager.GetGroupCharacters(currentGroupId);
+            Debug.Log($"[GroupInventory] Loaded {groupCharacters.Count} characters in group");
+        }
+
+        private void LoadOwnership()
+        {
+            allOwnerships.Clear();
+
+            if (inventoryManager != null)
+            {
+                allOwnerships = inventoryManager.GetAllOwnerships();
+                Debug.Log($"[GroupInventory] Loaded {allOwnerships.Count} ownership records");
+            }
+        }
+
+        private void UpdateCharacterFilter()
+        {
+            if (characterFilter == null) return;
+
+            characterFilter.ClearOptions();
+
+            var options = new List<string> { "All Characters", "Unassigned" };
+            options.AddRange(groupCharacters.Select(c => c.characterName));
+
+            characterFilter.AddOptions(options);
+        }
+
+        // =====================================================================
+        // DISPLAY MANAGEMENT
+        // =====================================================================
 
         private void RefreshItemDisplay()
         {
@@ -176,26 +239,68 @@ namespace InventorySystem.UI.Pages
             // Apply category filter
             if (categoryFilter != null && categoryFilter.value > 0)
             {
-                var categories = System.Enum.GetValues(typeof(ItemCategory)).Cast<ItemCategory>().ToArray();
+                var categories = Enum.GetValues(typeof(ItemCategory)).Cast<ItemCategory>().ToArray();
                 var selectedCategory = categories[categoryFilter.value - 1];
                 filtered = filtered.Where(item => item.category == selectedCategory).ToList();
             }
 
-            // Apply owner filter
-            if (ownerFilter != null && ownerFilter.value > 0)
+            // Apply character filter
+            if (characterFilter != null && characterFilter.value > 0)
             {
-                string selectedOwner = ownerFilter.options[ownerFilter.value].text;
-                if (selectedOwner == "Unassigned")
+                if (characterFilter.value == 1) // "Unassigned"
                 {
-                    filtered = filtered.Where(item => string.IsNullOrEmpty(item.currentOwner)).ToList();
+                    // Show only items with no ownership or available quantity
+                    filtered = filtered.Where(item =>
+                    {
+                        int totalOwned = allOwnerships
+                            .Where(o => o.itemId == item.itemId)
+                            .Sum(o => o.quantityOwned);
+                        return totalOwned < item.quantity; // Has available quantity
+                    }).ToList();
                 }
-                else
+                else // Specific character
                 {
-                    filtered = filtered.Where(item => item.currentOwner == selectedOwner).ToList();
+                    int charIndex = characterFilter.value - 2;
+                    if (charIndex >= 0 && charIndex < groupCharacters.Count)
+                    {
+                        string characterId = groupCharacters[charIndex].characterId;
+
+                        // Show items owned by this character
+                        var ownedItemIds = allOwnerships
+                            .Where(o => o.characterId == characterId && o.quantityOwned > 0)
+                            .Select(o => o.itemId)
+                            .ToHashSet();
+
+                        filtered = filtered.Where(item => ownedItemIds.Contains(item.itemId)).ToList();
+                    }
                 }
             }
 
-            // Sort items
+            // Apply availability filter
+            if (availabilityFilter != null && availabilityFilter.value > 0)
+            {
+                if (availabilityFilter.value == 1) // "Available Only"
+                {
+                    filtered = filtered.Where(item =>
+                    {
+                        int totalOwned = allOwnerships
+                            .Where(o => o.itemId == item.itemId)
+                            .Sum(o => o.quantityOwned);
+                        return totalOwned < item.quantity;
+                    }).ToList();
+                }
+                else if (availabilityFilter.value == 2) // "Claimed Only"
+                {
+                    filtered = filtered.Where(item =>
+                    {
+                        int totalOwned = allOwnerships
+                            .Where(o => o.itemId == item.itemId)
+                            .Sum(o => o.quantityOwned);
+                        return totalOwned > 0;
+                    }).ToList();
+                }
+            }
+
             return filtered.OrderBy(item => item.category).ThenBy(item => item.itemName).ToList();
         }
 
@@ -203,23 +308,62 @@ namespace InventorySystem.UI.Pages
         {
             if (itemCardPrefab == null || itemContainer == null) return;
 
-            var cardObj = Instantiate(itemCardPrefab, itemContainer);
-            var cardUI = cardObj.GetComponent<ItemCardUI>();
+            GameObject cardObj = Instantiate(itemCardPrefab, itemContainer);
+            ItemCardUI cardUI = cardObj.GetComponent<ItemCardUI>();
 
             if (cardUI != null)
             {
+                // Calculate ownership info
+                var ownerships = allOwnerships.Where(o => o.itemId == item.itemId).ToList();
+                int totalOwned = ownerships.Sum(o => o.quantityOwned);
+                int available = item.quantity - totalOwned;
+
+                // Create ownership summary
+                string ownershipSummary = GetOwnershipSummary(item.itemId);
+
                 cardUI.SetupCard(item, ItemCardUI.CardMode.Group);
+
+                // Set ownership display
+                cardUI.SetOwnershipInfo(ownershipSummary, available, totalOwned);
 
                 // Subscribe to events
                 cardUI.OnCardSelected += OnCardExpanded;
                 cardUI.OnItemModified += OnGroupItemModified;
                 cardUI.OnItemDeleted += OnItemDeleted;
+                cardUI.OnClaimRequested += OnClaimRequested;
+                cardUI.OnShareRequested += OnShareRequested;
+                cardUI.OnReturnRequested += OnReturnRequested;
+                cardUI.OnTransferRequested += OnTransferToPersonalRequested;
+
 
                 itemCardObjects.Add(cardObj);
             }
         }
 
+        private string GetOwnershipSummary(string itemId)
+        {
+            var ownerships = allOwnerships.Where(o => o.itemId == itemId).ToList();
 
+            if (ownerships.Count == 0)
+                return "Party Storage";
+
+            var ownershipList = new List<string>();
+
+            foreach (var ownership in ownerships)
+            {
+                var character = groupCharacters.FirstOrDefault(c => c.characterId == ownership.characterId);
+                string characterName = character?.characterName ?? "Unknown";
+                ownershipList.Add($"{characterName} ({ownership.quantityOwned})");
+            }
+
+            var item = groupItems.FirstOrDefault(i => i.itemId == itemId);
+            int available = item != null ? item.quantity - ownerships.Sum(o => o.quantityOwned) : 0;
+
+            if (available > 0)
+                ownershipList.Add($"Party ({available})");
+
+            return string.Join(", ", ownershipList);
+        }
 
         private void ClearItemCards()
         {
@@ -246,12 +390,34 @@ namespace InventorySystem.UI.Pages
             if (totalValueText != null)
                 totalValueText.text = $"Total Value: {totalValue:N0} gp";
 
-            // Update group members count
-            if (groupMembersText != null && inventoryManager != null)
+
+            // Calculate available vs claimed
+            int availableCount = 0;
+            int claimedCount = 0;
+
+            foreach (var item in groupItems)
             {
-                // This would come from the network manager's user list
-                groupMembersText.text = "Group Members: 3"; // Placeholder
+                int totalOwned = allOwnerships
+                    .Where(o => o.itemId == item.itemId)
+                    .Sum(o => o.quantityOwned);
+
+                int available = item.quantity - totalOwned;
+
+                if (available > 0)
+                    availableCount++;
+                if (totalOwned > 0)
+                    claimedCount++;
             }
+
+            if (availableItemsText != null)
+                availableItemsText.text = $"Available: {availableCount}";
+
+            if (claimedItemsText != null)
+                claimedItemsText.text = $"Claimed: {claimedCount}";
+
+            if (groupMemberText != null)
+                groupMemberText.text = $"Members: {groupCharacters.Count}";
+            
         }
 
         private void UpdateConnectionStatus()
@@ -266,196 +432,166 @@ namespace InventorySystem.UI.Pages
 
             if (lastSyncText != null)
             {
-                lastSyncText.text = $"Last sync: {System.DateTime.Now:HH:mm:ss}";
-            }
-
-            if (reconnectButton != null)
-            {
-                reconnectButton.gameObject.SetActive(!isConnected);
+                lastSyncText.text = $"Last sync: {DateTime.Now:HH:mm:ss}";
             }
         }
-        //<todo: review, I don't think this is right>
-        private void UpdateItemCardWithOwnership(ItemCardUI cardUI, InventoryItem item)
+
+        // =====================================================================
+        // EVENT HANDLERS
+        // =====================================================================
+
+        private void OnInventoryChanged(List<InventoryItem> updatedInventory)
         {
-            // Get ownership summary
-            var groupInventory = new GroupInventory(); // Or get from InventoryManager
-                                                       // You'll need to expose this through InventoryManager
-
-            string ownershipText = groupInventory.GetOwnershipSummary(item.itemId);
-
-            // Update the card's owner text
-            // This assumes ItemCardUI has a method to set ownership display
-            // cardUI.SetOwnershipText(ownershipText);
-        }
-
-        // Event Handlers
-        private void OnNetworkInventoryChanged(List<InventoryItem> updatedInventory)
-        {
-            groupItems = updatedInventory.ToList();
+            LoadGroupInventory();
+            LoadOwnership();
             RefreshItemDisplay();
         }
 
-        private void OnNetworkMessage(string message)
+        private void OnInventoryMessage(string message)
         {
             ShowMessage(message, MessageType.Info);
         }
 
-        private void OnUsersChanged(List<SerializableUserInfo> users)
+        private void OnCurrentGroupChanged(Group newGroup)
         {
-            UpdateOwnerFilter(users);
-            UpdateGroupStats();
+            if (newGroup != null)
+            {
+                currentGroupId = newGroup.groupId;
+                RefreshContent();
+            }
         }
 
-        private void UpdateOwnerFilter(List<SerializableUserInfo> users)
+        private void OnCharactersChanged(List<PlayerCharacter> characters)
         {
-            if (ownerFilter == null) return;
-
-            ownerFilter.ClearOptions();
-            var options = new List<string> { "All Players", "Unassigned" };
-            options.AddRange(users.Where(u => u.isOnline).Select(u => u.userName.ToString()));
-            ownerFilter.AddOptions(options);
+            LoadGroupCharacters();
+            UpdateCharacterFilter();
+            RefreshItemDisplay();
         }
 
         private void OnSearchChanged(string searchTerm)
         {
-            Debug.Log($"[GroupInventory] Search changed: '{searchTerm}'");
             RefreshItemDisplay();
         }
 
         private void OnFilterChanged(int filterIndex)
         {
-            // Determine which filter changed
-            string filterType = "Unknown";
-            if (categoryFilter != null && categoryFilter.value == filterIndex)
-                filterType = "Category";
-            else if (ownerFilter != null && ownerFilter.value == filterIndex)
-                filterType = "Owner";
-
-            Debug.Log($"[GroupInventory] {filterType} filter changed to index: {filterIndex}");
             RefreshItemDisplay();
         }
 
         private void OnCardExpanded(ItemCardUI expandedCard)
         {
-            Debug.Log($"[GroupInventory] Card expanded: {expandedCard.CurrentItem.itemName}");
-
-            // Collapse previously expanded card
             if (currentlyExpandedCard != null && currentlyExpandedCard != expandedCard)
             {
                 currentlyExpandedCard.CollapseCard();
             }
-
             currentlyExpandedCard = expandedCard;
         }
 
-        private void OnItemDeleted(InventoryItem item)
+        private async void OnGroupItemModified(InventoryItem item)
         {
-            Debug.Log($"[GroupInventory] Deleting item: {item.itemName}");
-
-            // Remove from InventoryManager
-            InventoryManager.Instance?.RemoveItem(item.itemId);
-
-            // Refresh display
-            RefreshContent();
-        }
-
-        private void OnGroupItemModified(InventoryItem item)
-        {
-            Debug.Log($"[GroupInventory] Item modified: {item.itemName}, Owner: {item.currentOwner ?? "Unassigned"}");
+            Debug.Log($"[GroupInventory] Item modified: {item.itemName}");
 
             if (inventoryManager != null)
             {
-                inventoryManager.UpdateItemQuantityAsync(item.itemId, item.quantity);
+                await inventoryManager.UpdateItemQuantityAsync(item.itemId, item.quantity);
+            }
+
+            UpdateGroupStats();
+        }
+
+        private async void OnItemDeleted(InventoryItem item)
+        {
+            Debug.Log($"[GroupInventory] Deleting item: {item.itemName}");
+
+            if (inventoryManager != null)
+            {
+                await inventoryManager.RemoveItemAsync(item.itemId);
+            }
+
+            RefreshContent();
+        }
+
+        private void OnClaimRequested(InventoryItem item)
+        {
+            if (claimItemDialog != null)
+            {
+                // Get user's characters
+                var userCharacters = characterManager?.GetCharactersByUser(currentUserId) ?? new List<PlayerCharacter>();
+
+                if (userCharacters.Count == 0)
+                {
+                    ShowMessage("Create a character first to claim items", MessageType.Warning);
+                    return;
+                }
+
+                // Calculate available quantity
+                int totalOwned = allOwnerships
+                    .Where(o => o.itemId == item.itemId)
+                    .Sum(o => o.quantityOwned);
+                int available = item.quantity - totalOwned;
+
+                if (available <= 0)
+                {
+                    ShowMessage("No available quantity to claim", MessageType.Warning);
+                    return;
+                }
+
+                claimItemDialog.ShowDialog(item, userCharacters, available);
+                claimItemDialog.OnItemClaimed += OnItemClaimed;
             }
             else
             {
-                Debug.LogWarning("[GroupInventory] InventoryManager not available, changes not synced");
+                ShowMessage("Claim dialog not available", MessageType.Error);
             }
+        }
 
-            // Just update stats, don't refresh entire display
-            UpdateGroupStats();
+        private async void OnItemClaimed(string itemId, string characterId, int quantity)
+        {
+            Debug.Log($"[GroupInventory] Claiming {quantity}x item {itemId} for character {characterId}");
+
+            if (inventoryManager != null)
+            {
+                await inventoryManager.UpdateOwnershipAsync(itemId, characterId, quantity);
+
+                ShowMessage($"Claimed {quantity} item(s)", MessageType.Success);
+
+                LoadOwnership();
+                RefreshItemDisplay();
+            }
         }
 
         private void OpenItemBrowser()
         {
             if (addItemDialog != null)
             {
-                string playerName = PlayerPrefs.GetString("UserName", "Player");
-                addItemDialog.ShowDialog(playerName);
-                Debug.Log($"[GroupInventory] Opening add item dialog for {playerName}");
-            }
-            else
-            {
-                // Fallback: Navigate to item browser
-                Debug.LogWarning("[GroupInventory] AddItemDialog not assigned, navigating to ItemBrowser");
-                NavigateTo(UIPageType.ItemBrowser);
+                string userName = PlayerPrefs.GetString("UserName", "Player");
+                addItemDialog.ShowDialog(userName);
             }
         }
 
-
         private async void OnCustomItemCreatedForGroup(CustomItemData customItem)
         {
-            Debug.Log($"[GroupInventory] Custom item created for group: {customItem.itemName}");
+            Debug.Log($"[GroupInventory] Custom item created: {customItem.itemName}");
 
-            try
+            var inventoryItem = customItem.ToInventoryItem();
+
+            if (inventoryManager != null)
             {
-                // Use built-in conversion method
-                var inventoryItem = customItem.ToInventoryItem();
-
-                // Keep owner empty for party items
-                inventoryItem.currentOwner = ""; // Empty = party item
-                //inventoryItem.isCustomItem = true;
-
-                // Add to network inventory
-                if (inventoryManager != null)
-                {
-                    inventoryManager.AddItemAsync(inventoryItem);
-
-                    await System.Threading.Tasks.Task.Delay(300);
-                    RefreshContent();
-                }
-                else
-                {
-                    ShowMessage("Network manager not available", MessageType.Error);
-                }
-            }
-            catch (System.Exception e)
-            {
-                Debug.LogError($"[GroupInventory] Error adding custom item: {e.Message}");
-                ShowMessage($"Error: {e.Message}", MessageType.Error);
+                await inventoryManager.AddItemAsync(inventoryItem);
+                await System.Threading.Tasks.Task.Delay(300);
+                RefreshContent();
             }
         }
 
         private async void OnItemSelectedFromSearch(InventoryItem item)
         {
-            Debug.Log($"[Group Inventory] Item selected from search: {item.itemName}");
+            Debug.Log($"[GroupInventory] Item selected from search: {item.itemName}");
 
-            try
+            if (inventoryManager != null)
             {
-                // todo update owner to be the group id
-                item.currentOwner = "";
-
-                Debug.Log($"[GroupInventory] InventoryManager exists: {InventoryManager.Instance != null}");
-
-                // Add to network inventory
-                if (InventoryManager.Instance != null)
-                {
-                    Debug.Log($"[GroupInventory] Calling InventoryManager.AddItem()");
-                    InventoryManager.Instance.AddItem(item);
-
-                    await System.Threading.Tasks.Task.Delay(300);
-                    RefreshContent();
-                }
-                else
-                {
-                    Debug.LogError("[GroupInventory] InventoryManager.Instance is NULL!");
-                    ShowMessage("Network manager not available", MessageType.Error);
-                }
-            }
-            catch (System.Exception e)
-            {
-                Debug.LogError($"[Group Inventory] Error adding searched item: {e.Message}");
-                ShowMessage($"Error: {e.Message}", MessageType.Error);
+                await inventoryManager.AddItemAsync(item);
+                await System.Threading.Tasks.Task.Delay(300);
+                RefreshContent();
             }
         }
 
@@ -464,240 +600,234 @@ namespace InventorySystem.UI.Pages
             Debug.Log("[GroupInventory] Add item dialog closed");
         }
 
+
+        /// <summary>
+        /// Character claims (shares) ownership of item from group pool
+        /// Item stays in group inventory, character is marked as owner
+        /// </summary>
+        private async void OnShareRequested(InventoryItem item, int quantity)
+        {
+            string currentCharacterId = PlayerPrefs.GetString("SelectedCharacterId", "");
+
+            if (string.IsNullOrEmpty(currentCharacterId))
+            {
+                ShowMessage("No character selected", MessageType.Warning);
+                return;
+            }
+
+            if (inventoryManager == null) return;
+
+            // Check unclaimed quantity
+            int unclaimed = inventoryManager.GetUnallocatedQuantity(item.itemId);
+
+            if (quantity > unclaimed)
+            {
+                ShowMessage($"Only {unclaimed} unclaimed available", MessageType.Warning);
+                return;
+            }
+
+            try
+            {
+                // Claim ownership (adds ItemOwnership record)
+                await inventoryManager.UpdateOwnershipAsync(
+                    item.itemId,
+                    currentCharacterId,
+                    quantity
+                );
+
+                var character = characterManager?.GetCharacterById(currentCharacterId);
+                ShowMessage($"{character?.characterName ?? "Character"} claimed {quantity}x {item.itemName}", MessageType.Success);
+
+                Debug.Log($"[GroupInventory] Character {currentCharacterId} claimed {quantity}x {item.itemName}");
+
+                // Refresh display
+                LoadOwnership();
+                RefreshItemDisplay();
+            }
+            catch (Exception e)
+            {
+                ShowMessage($"Claim failed: {e.Message}", MessageType.Error);
+                Debug.LogError($"[GroupInventory] Claim error: {e}");
+            }
+        }
+
+        /// <summary>
+        /// Character returns (unshares) ownership back to group pool
+        /// Item stays in group inventory, just releases ownership
+        /// </summary>
+        private async void OnReturnRequested(InventoryItem item, int quantity)
+        {
+            string currentCharacterId = PlayerPrefs.GetString("SelectedCharacterId", "");
+
+            if (string.IsNullOrEmpty(currentCharacterId))
+            {
+                ShowMessage("No character selected", MessageType.Warning);
+                return;
+            }
+
+            if (inventoryManager == null) return;
+
+            // Check how much character owns
+            int owned = inventoryManager.GetCharacterOwnership(item.itemId, currentCharacterId);
+
+            if (quantity > owned)
+            {
+                ShowMessage($"You only own {owned}", MessageType.Warning);
+                return;
+            }
+
+            try
+            {
+                // Return ownership (removes/reduces ItemOwnership record)
+                await inventoryManager.ReturnOwnershipAsync(
+                    item.itemId,
+                    currentCharacterId,
+                    quantity
+                );
+
+                var character = characterManager?.GetCharacterById(currentCharacterId);
+                ShowMessage($"{character?.characterName ?? "Character"} returned {quantity}x {item.itemName} to pool", MessageType.Success);
+
+                Debug.Log($"[GroupInventory] Character {currentCharacterId} returned {quantity}x {item.itemName}");
+
+                // Refresh display
+                LoadOwnership();
+                RefreshItemDisplay();
+            }
+            catch (Exception e)
+            {
+                ShowMessage($"Return failed: {e.Message}", MessageType.Error);
+                Debug.LogError($"[GroupInventory] Return error: {e}");
+            }
+        }
+
+        /// <summary>
+        /// Character transfers item FROM group TO personal storage (PERMANENT)
+        /// Item is removed from group entirely and added to personal inventory
+        /// </summary>
+        private async void OnTransferToPersonalRequested(InventoryItem item)
+        {
+            string currentCharacterId = PlayerPrefs.GetString("SelectedCharacterId", "");
+
+            if (string.IsNullOrEmpty(currentCharacterId))
+            {
+                ShowMessage("No character selected", MessageType.Warning);
+                return;
+            }
+
+            var personalStorage = PersonalStorageManager.Instance;
+            if (inventoryManager == null || personalStorage == null) return;
+
+            // Check ownership
+            int owned = inventoryManager.GetCharacterOwnership(item.itemId, currentCharacterId);
+
+            if (owned <= 0)
+            {
+                ShowMessage("You don't own any of this item", MessageType.Warning);
+                return;
+            }
+
+            // TODO: Show quantity dialog if owned > 1
+            int quantityToTransfer = owned; // For now, transfer all
+
+            try
+            {
+                Debug.Log($"[GroupInventory] PERMANENT TRANSFER: {quantityToTransfer}x {item.itemName} to personal");
+
+                // 1. Return ownership (unclaim)
+                await inventoryManager.ReturnOwnershipAsync(item.itemId, currentCharacterId, quantityToTransfer);
+
+                // 2. Reduce group's total quantity
+                int newGroupQuantity = item.quantity - quantityToTransfer;
+                await inventoryManager.UpdateItemQuantityAsync(item.itemId, newGroupQuantity);
+
+                // 3. Add to personal storage
+                var personalItem = new InventoryItem(item.itemName, item.category)
+                {
+                    itemId = Guid.NewGuid().ToString(), // New ID
+                    description = item.description,
+                    quantity = quantityToTransfer,
+                    weight = item.weight,
+                    valueInGold = item.valueInGold,
+                    thumbnailUrl = item.thumbnailUrl,
+                    sourceUrl = item.sourceUrl,
+                    properties = new Dictionary<string, string>(item.properties ?? new Dictionary<string, string>())
+                };
+
+                await personalStorage.AddItemAsync(personalItem, currentCharacterId);
+
+                var character = characterManager?.GetCharacterById(currentCharacterId);
+                ShowMessage($"Transferred {quantityToTransfer}x {item.itemName} to {character?.characterName}'s personal storage (PERMANENT)", MessageType.Success);
+
+                // Refresh
+                RefreshContent();
+            }
+            catch (Exception e)
+            {
+                ShowMessage($"Transfer failed: {e.Message}", MessageType.Error);
+                Debug.LogError($"[GroupInventory] Transfer error: {e}");
+            }
+        }
+
         private void CycleSortMode()
         {
-            // Cycle through different sort modes
             ShowMessage("Sort mode cycling - feature coming soon!", MessageType.Info);
         }
 
-        private void OpenUserManagement()
+        private void OpenGroupManagement()
         {
-            ShowMessage("User management dialog - feature coming soon!", MessageType.Info);
+            NavigateTo(UIPageType.GroupManagement);
         }
 
         private void ExportGroupInventory()
         {
             ShowMessage("Exporting group inventory...", MessageType.Info);
-            // TODO: Implement group inventory export
-        }
-
-        private void ShareInventoryLink()
-        {
-            // Generate shareable link or invite code
-            string inviteCode = System.Guid.NewGuid().ToString("N")[..8].ToUpper();
-            ShowMessage($"Invite code: {inviteCode} (copied to clipboard)", MessageType.Success);
-
-            // TODO: Implement actual link sharing system
-        }
-
-        private void Reconnect()
-        {
-            ShowMessage("Attempting to reconnect...", MessageType.Info);
-
-            // TODO: Implement network reconnection logic
-            if (inventoryManager != null)
-            {
-                // inventoryManager.Reconnect();
-            }
+            // TODO: Implement export
         }
 
         void OnDestroy()
         {
             if (inventoryManager != null)
             {
-                inventoryManager.OnInventoryChanged -= OnNetworkInventoryChanged;
-                inventoryManager.OnInventoryMessage -= OnNetworkMessage;
-                
-            }
-            if (userManager != null)
-            {
-                userManager.OnUsersChanged -= OnUsersChanged;
+                inventoryManager.OnInventoryChanged -= OnInventoryChanged;
+                inventoryManager.OnInventoryMessage -= OnInventoryMessage;
             }
 
-            // Clean up dialog events
+            if (groupManager != null)
+            {
+                groupManager.OnCurrentGroupChanged -= OnCurrentGroupChanged;
+            }
+
+            if (characterManager != null)
+            {
+                characterManager.OnCharactersChanged -= OnCharactersChanged;
+            }
+
             if (addItemDialog != null)
             {
                 addItemDialog.OnItemCreated -= OnCustomItemCreatedForGroup;
                 addItemDialog.OnItemSelected -= OnItemSelectedFromSearch;
                 addItemDialog.OnDialogClosed -= OnAddItemDialogClosed;
             }
+
+            if (claimItemDialog != null)
+            {
+                claimItemDialog.OnItemClaimed -= OnItemClaimed;
+            }
+            // Clean up item card event subscriptions
+            foreach (var cardObj in itemCardObjects)
+            {
+                if (cardObj != null)
+                {
+                    var card = cardObj.GetComponent<ItemCardUI>();
+                    if (card != null)
+                    {
+                        card.OnShareRequested -= OnShareRequested;
+                        card.OnReturnRequested -= OnReturnRequested;
+                        card.OnTransferRequested -= OnTransferToPersonalRequested;
+                    }
+                }
+            }
         }
-        /*
-        [ContextMenu("Run Inventory Diagnostics")]
-        public void RunInventoryDiagnostics()
-        {
-            Debug.Log("========================================");
-            Debug.Log("INVENTORY CONNECTION DIAGNOSTICS");
-            Debug.Log("========================================");
-
-            // Check AddItemDialog
-            Debug.Log($"1. AddItemDialog Reference: {(addItemDialog != null ? "✅ Assigned" : "❌ NULL")}");
-            if (addItemDialog != null)
-            {
-                Debug.Log($"   - Dialog GameObject: {addItemDialog.gameObject.name}");
-                Debug.Log($"   - Dialog Active: {addItemDialog.gameObject.activeInHierarchy}");
-
-                // Check event subscriptions via reflection
-                var eventField = typeof(AddItemDialog).GetField("OnItemSelected",
-                    System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Instance);
-
-                if (eventField != null)
-                {
-                    var eventDelegate = eventField.GetValue(addItemDialog) as System.Delegate;
-                    if (eventDelegate != null)
-                    {
-                        Debug.Log($"   - OnItemSelected subscribers: {eventDelegate.GetInvocationList().Length}");
-                        foreach (var handler in eventDelegate.GetInvocationList())
-                        {
-                            Debug.Log($"     • {handler.Method.DeclaringType.Name}.{handler.Method.Name}");
-                        }
-                    }
-                    else
-                    {
-                        Debug.LogError("   - ❌ OnItemSelected has NO subscribers!");
-                    }
-                }
-            }
-
-            Debug.Log("");
-
-            // Check NetworkInventoryManager
-            Debug.Log($"2. NetworkInventoryManager.Instance: {(NetworkInventoryManager.Instance != null ? " Exists" : " NULL")}");
-            if (NetworkInventoryManager.Instance != null)
-            {
-                var nim = NetworkInventoryManager.Instance;
-                Debug.Log($"   - GameObject: {nim.gameObject.name}");
-                Debug.Log($"   - GameObject Active: {nim.gameObject.activeInHierarchy}");
-
-                // Use reflection to check Netcode status without requiring the package
-                var networkBehaviourType = nim.GetType().BaseType;
-                if (networkBehaviourType != null && networkBehaviourType.Name == "NetworkBehaviour")
-                {
-                    Debug.Log($"   - Is NetworkBehaviour:  Yes");
-
-                    try
-                    {
-                        var isSpawnedProp = networkBehaviourType.GetProperty("IsSpawned");
-                        var isServerProp = networkBehaviourType.GetProperty("IsServer");
-                        var isClientProp = networkBehaviourType.GetProperty("IsClient");
-
-                        if (isSpawnedProp != null)
-                            Debug.Log($"   - IsSpawned: {isSpawnedProp.GetValue(nim)}");
-                        if (isServerProp != null)
-                            Debug.Log($"   - IsServer: {isServerProp.GetValue(nim)}");
-                        if (isClientProp != null)
-                            Debug.Log($"   - IsClient: {isClientProp.GetValue(nim)}");
-                    }
-                    catch (System.Exception e)
-                    {
-                        Debug.LogWarning($"   - Could not read Netcode properties: {e.Message}");
-                    }
-                }
-                else
-                {
-                    Debug.Log($"   - Is NetworkBehaviour:  No (not using Netcode)");
-                }
-
-                var inventory = nim.GetCurrentInventory();
-                Debug.Log($"   - Current Inventory Count: {inventory?.Count ?? 0}");
-
-                if (inventory != null && inventory.Count > 0)
-                {
-                    Debug.Log($"   - Sample items:");
-                    foreach (var item in inventory.Take(3))
-                    {
-                        Debug.Log($"     • {item.itemName} (x{item.quantity})");
-                    }
-                }
-            }
-
-            Debug.Log("");
-
-            // Check if Netcode package exists
-            var netcodeAssembly = System.AppDomain.CurrentDomain.GetAssemblies()
-                .FirstOrDefault(a => a.GetName().Name == "Unity.Netcode.Runtime");
-
-            if (netcodeAssembly != null)
-            {
-                Debug.Log($"3. Unity Netcode Package:  Installed");
-
-                // Try to get NetworkManager via reflection
-                var networkManagerType = netcodeAssembly.GetType("Unity.Netcode.NetworkManager");
-                if (networkManagerType != null)
-                {
-                    var singletonProp = networkManagerType.GetProperty("Singleton",
-                        System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Static);
-
-                    if (singletonProp != null)
-                    {
-                        var singleton = singletonProp.GetValue(null);
-                        Debug.Log($"   - NetworkManager.Singleton: {(singleton != null ? " Exists" : " NULL")}");
-
-                        if (singleton != null)
-                        {
-                            var isServerProp = networkManagerType.GetProperty("IsServer");
-                            var isClientProp = networkManagerType.GetProperty("IsClient");
-                            var isListeningProp = networkManagerType.GetProperty("IsListening");
-
-                            if (isServerProp != null)
-                                Debug.Log($"   - IsServer: {isServerProp.GetValue(singleton)}");
-                            if (isClientProp != null)
-                                Debug.Log($"   - IsClient: {isClientProp.GetValue(singleton)}");
-                            if (isListeningProp != null)
-                            {
-                                bool isListening = (bool)isListeningProp.GetValue(singleton);
-                                Debug.Log($"   - IsListening: {isListening}");
-
-                                if (!isListening)
-                                {
-                                    Debug.LogWarning("   -  Netcode not started! Call StartHost() or StartClient() to enable networking");
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-            else
-            {
-                Debug.Log($"3. Unity Netcode Package:  Not Installed");
-            }
-
-            Debug.Log("");
-
-            // Check local state
-            Debug.Log($"4. GroupInventoryPage State:");
-            Debug.Log($"   - groupItems count: {groupItems?.Count ?? 0}");
-            Debug.Log($"   - itemCardObjects count: {itemCardObjects?.Count ?? 0}");
-            Debug.Log($"   - networkManager reference: {(networkManager != null ? " Assigned" : " NULL")}");
-
-            Debug.Log("");
-            Debug.Log($"5. Event Subscriptions:");
-            if (networkManager != null)
-            {
-                // Check if events are subscribed
-                var onInventoryChangedField = typeof(NetworkInventoryManager).GetField("OnInventoryChanged",
-                    System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Instance);
-
-                if (onInventoryChangedField != null)
-                {
-                    var eventDelegate = onInventoryChangedField.GetValue(networkManager) as System.Delegate;
-                    if (eventDelegate != null)
-                    {
-                        Debug.Log($"   - OnInventoryChanged subscribers: {eventDelegate.GetInvocationList().Length}");
-                    }
-                    else
-                    {
-                        Debug.LogWarning("   - ⚠️ OnInventoryChanged has NO subscribers!");
-                    }
-                }
-            }
-
-            Debug.Log("========================================");
-            Debug.Log("DIAGNOSTIC COMPLETE");
-            Debug.Log("========================================");
-        }
-
-        */
-
     }
 }
