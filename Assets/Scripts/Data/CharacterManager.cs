@@ -134,20 +134,33 @@ public class CharacterManager : MonoBehaviour
 
     public async Task LoadCharactersAsync()
     {
-        if (!enablePersistence || storage == null) return;
-
+        if (!enablePersistence) return;
+    
         try
         {
-            var data = await storage.LoadAsync(currentGroupId);
+            string filePath = GetCharacterFilePath();
+            
+            if (!System.IO.File.Exists(filePath))
+            {
+                characters = new List<PlayerCharacter>();
+                if (logging)
+                    Debug.Log("[CharacterManager] No character file found - starting fresh");
+                OnCharactersChanged?.Invoke(characters);
+                return;
+            }
+            
+            string json = await System.IO.File.ReadAllTextAsync(filePath);
+            var data = JsonUtility.FromJson<CharacterStorageData>(json);
+            
             if (data != null && data.characters != null)
             {
                 characters = data.characters
                     .Select(sc => sc.ToPlayerCharacter())
                     .ToList();
-
+    
                 if (logging)
-                    Debug.Log($"[CharacterManager] Loaded {characters.Count} characters");
-
+                    Debug.Log($"[CharacterManager] Loaded {characters.Count} characters from {filePath}");
+    
                 OnCharactersChanged?.Invoke(characters);
             }
             else
@@ -160,6 +173,7 @@ public class CharacterManager : MonoBehaviour
         catch (Exception e)
         {
             Debug.LogError($"[CharacterManager] LoadCharactersAsync failed: {e.Message}");
+            characters = new List<PlayerCharacter>();
         }
     }
 
@@ -169,26 +183,28 @@ public class CharacterManager : MonoBehaviour
 
         try
         {
-            var data = await storage.LoadAsync(currentGroupId) ?? new InventoryPersistenceData();
-            data.groupId = currentGroupId;
-            data.lastSaved = DateTime.Now.ToString("O");
-
-            // Update only the characters field
-            data.characters = characters
-                .Select(SerializablePlayerCharacter.FromPlayerCharacter)
-                .ToList();
-
-            await storage.SaveAsync(data);
-
+            // NEW: Create character-specific data structure
+            var characterData = new CharacterStorageData
+            {
+                groupId = currentGroupId,
+                lastSaved = DateTime.Now.ToString("O"),
+                characters = characters.Select(SerializablePlayerCharacter.FromPlayerCharacter).ToList()
+            };
+            
+            // Save to separate file (not mixed with inventory)
+            string json = JsonUtility.ToJson(characterData, prettyPrint: true);
+            string filePath = GetCharacterFilePath();
+            
+            await System.IO.File.WriteAllTextAsync(filePath, json);
+    
             if (logging)
-                Debug.Log($"[CharacterManager] Saved {characters.Count} characters");
+                Debug.Log($"[CharacterManager] Saved {characters.Count} characters to {filePath}");
         }
         catch (Exception e)
         {
             Debug.LogError($"[CharacterManager] SaveCharactersAsync failed: {e.Message}");
         }
     }
-
     private void UpdateCurrentGroupId()
     {
         var groupManager = GroupManager.Instance;
@@ -207,6 +223,26 @@ public class CharacterManager : MonoBehaviour
             }
         }
     }
+    private string GetCharacterFilePath()
+    {
+        string folder = System.IO.Path.Combine(UnityEngine.Application.persistentDataPath, "CharacterData");
+        
+        if (!System.IO.Directory.Exists(folder))
+            System.IO.Directory.CreateDirectory(folder);
+        
+        return System.IO.Path.Combine(folder, $"characters_{currentGroupId}.json");
+    }
 
     #endregion
+}
+
+/// <summary>
+/// Storage format for character data (separate from inventory)
+/// </summary>
+[System.Serializable]
+public class CharacterStorageData
+{
+    public string groupId;
+    public string lastSaved;
+    public List<SerializablePlayerCharacter> characters;
 }
