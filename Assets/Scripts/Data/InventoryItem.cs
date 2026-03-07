@@ -62,7 +62,11 @@ public class InventoryItem
     [Tooltip("Which Player currently 'owns' thi item")]
     public string currentOwner = "";
 
-
+    
+    public StorageContext storageContext = StorageContext.Group;  // Default to group (backward compatible)
+    public string ownerId;      // characterId OR groupId
+    public string groupId;      // null if personal, groupId if group/borrowed
+    
     // Hidden fields (for later)
     [HideInInspector] public string itemId;
     [HideInInspector] public DateTime dateAdded;
