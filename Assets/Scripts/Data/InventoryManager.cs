@@ -834,4 +834,120 @@ public class InventoryManager : MonoBehaviour
     }
 
     #endregion
+
+    // ============================================================
+    // PERSONAL INVENTORY METHODS (NEW - Phase 1)
+    // ============================================================
+    
+    /// <summary>
+    /// Get personal items for a character (items they own solo, not in group)
+    /// </summary>
+    public List<InventoryItem> GetPersonalItems(string characterId)
+    {
+        // For now, return from cache if we have it
+        // In Phase 2, we'll add proper loading
+        return localInventoryCache
+            .Where(i => i.storageContext == StorageContext.Personal && i.ownerId == characterId)
+            .ToList();
+    }
+    
+    /// <summary>
+    /// Add item to character's personal inventory
+    /// </summary>
+    public async Task AddPersonalItemAsync(string characterId, InventoryItem item)
+    {
+        if (string.IsNullOrEmpty(characterId))
+        {
+            Debug.LogWarning("[InventoryManager] Cannot add personal item - characterId is null");
+            return;
+        }
+        
+        // Mark as personal
+        item.storageContext = StorageContext.Personal;
+        item.ownerId = characterId;
+        item.groupId = null;
+        item.itemId = item.itemId ?? Guid.NewGuid().ToString();
+        
+        // Add to cache
+        if (!localInventoryCache.Any(i => i.itemId == item.itemId))
+        {
+            localInventoryCache.Add(item);
+            itemLookup[item.itemId] = item;
+        }
+        
+        if (logging)
+            Debug.Log($"[InventoryManager] Added personal item: {item.itemName} to character {characterId}");
+        
+        OnInventoryChanged?.Invoke(localInventoryCache);
+        
+        // Save will happen in Phase 2
+        await Task.CompletedTask;
+    }
+    
+    /// <summary>
+    /// Update quantity of personal item
+    /// </summary>
+    public async Task UpdatePersonalItemQuantityAsync(string characterId, string itemId, int newQuantity)
+    {
+        var item = localInventoryCache.FirstOrDefault(i => 
+            i.itemId == itemId && 
+            i.storageContext == StorageContext.Personal && 
+            i.ownerId == characterId);
+        
+        if (item == null)
+        {
+            Debug.LogWarning($"[InventoryManager] Personal item {itemId} not found for character {characterId}");
+            return;
+        }
+        
+        if (newQuantity <= 0)
+        {
+            // Remove item
+            localInventoryCache.Remove(item);
+            itemLookup.Remove(itemId);
+            
+            if (logging)
+                Debug.Log($"[InventoryManager] Removed personal item: {item.itemName}");
+        }
+        else
+        {
+            item.quantity = newQuantity;
+            
+            if (logging)
+                Debug.Log($"[InventoryManager] Updated personal item quantity: {item.itemName} = {newQuantity}");
+        }
+        
+        OnInventoryChanged?.Invoke(localInventoryCache);
+        await Task.CompletedTask;
+    }
+    
+    /// <summary>
+    /// Delete personal item
+    /// </summary>
+    public async Task DeletePersonalItemAsync(string characterId, string itemId)
+    {
+        await UpdatePersonalItemQuantityAsync(characterId, itemId, 0);
+    }
+    
+    /// <summary>
+    /// Delete ALL personal items for a character (used when deleting character)
+    /// </summary>
+    public async Task DeletePersonalInventoryAsync(string characterId)
+    {
+        var itemsToRemove = localInventoryCache
+            .Where(i => i.storageContext == StorageContext.Personal && i.ownerId == characterId)
+            .ToList();
+        
+        foreach (var item in itemsToRemove)
+        {
+            localInventoryCache.Remove(item);
+            itemLookup.Remove(item.itemId);
+        }
+        
+        if (logging)
+            Debug.Log($"[InventoryManager] Deleted {itemsToRemove.Count} personal items for character {characterId}");
+        
+        OnInventoryChanged?.Invoke(localInventoryCache);
+        await Task.CompletedTask;
+    }
 }
