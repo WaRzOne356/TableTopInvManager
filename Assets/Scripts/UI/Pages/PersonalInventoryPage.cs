@@ -921,8 +921,15 @@ namespace InventorySystem.UI.Pages
         }
 
 
-        private void OnTransferConfirmed(TransferItemDialog.TransferRequest request)
+        private async void OnTransferConfirmed(TransferItemDialog.TransferRequest request)
         {
+            var inventoryManager = InventoryManager.Instance;
+            if (inventoryManager == null)
+            {
+                ShowMessage("InventoryManager not found", MessageType.Error);
+                return;
+            }
+
             var item = characterItems.FirstOrDefault(i => i.itemId == request.itemId);
             if (item == null)
             {
@@ -930,13 +937,28 @@ namespace InventorySystem.UI.Pages
                 return;
             }
 
-            if (request.direction == TransferItemDialog.TransferDirection.PersonalToGroup)
+            try
             {
-                TransferItemToGroup(item, request.quantity);
+                if (request.direction == TransferItemDialog.TransferDirection.PersonalToGroup)
+                {
+                    // Transfer from personal to group (permanent)
+                    await inventoryManager.TransferToGroupAsync(request.characterId, request.itemId, request.quantity);
+                    ShowMessage($"Transferred {request.quantity}x {item.itemName} to group", MessageType.Success);
+                }
+                else
+                {
+                    // Transfer from group to personal (permanent)
+                    await inventoryManager.TransferToPersonalAsync(request.characterId, request.itemId, request.quantity);
+                    ShowMessage($"Transferred {request.quantity}x {item.itemName} to personal", MessageType.Success);
+                }
+
+                await Task.Delay(200);
+                RefreshContent();
             }
-            else
+            catch (Exception e)
             {
-                TransferItemToPersonal(item, request.quantity);
+                ShowMessage($"Transfer failed: {e.Message}", MessageType.Error);
+                Debug.LogError($"[PersonalInventory] Transfer error: {e}");
             }
         }
 

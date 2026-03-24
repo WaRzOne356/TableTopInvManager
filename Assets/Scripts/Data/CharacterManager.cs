@@ -128,6 +128,67 @@ public class CharacterManager : MonoBehaviour
         }
     }
 
+    /// <summary>
+    /// Remove character from group
+    /// Coordinates with InventoryManager for item handling
+    /// </summary>
+    public async Task LeaveGroupAsync(string characterId, bool keepBorrowedItems = false)
+    {
+        var character = GetCharacterById(characterId);
+        if (character == null || string.IsNullOrEmpty(character.groupId))
+        {
+            Debug.LogWarning("[CharacterManager] Character not in group");
+            return;
+        }
+
+        string oldGroupId = character.groupId;
+
+        // Let InventoryManager handle borrowed items
+        var inventoryManager = InventoryManager.Instance;
+        if (inventoryManager != null)
+        {
+            await inventoryManager.OnCharacterLeaveGroupAsync(
+                characterId,
+                oldGroupId,
+                keepBorrowedItems
+            );
+        }
+
+        // Remove from group
+        character.groupId = null;
+        await SaveCharactersAsync();
+        OnCharactersChanged?.Invoke(characters);
+
+        if (logging)
+            Debug.Log($"[CharacterManager] {character.characterName} left group {oldGroupId}");
+    }
+
+    /// <summary>
+    /// Add character to group
+    /// </summary>
+    public async Task JoinGroupAsync(string characterId, string groupId)
+    {
+        var character = GetCharacterById(characterId);
+        if (character == null)
+        {
+            Debug.LogWarning("[CharacterManager] Character not found");
+            return;
+        }
+
+        if (!string.IsNullOrEmpty(character.groupId))
+        {
+            Debug.LogWarning("[CharacterManager] Character already in a group");
+            return;
+        }
+
+        character.groupId = groupId;
+        await SaveCharactersAsync();
+        OnCharactersChanged?.Invoke(characters);
+
+        if (logging)
+            Debug.Log($"[CharacterManager] {character.characterName} joined group {groupId}");
+    }
+
     #endregion
 
     #region Persistence
